@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="proto-pan">
+		<_short>Proto Pan</_short>
+		<_long>P0 prototype: scrolling-layout free-pan mechanism (sublayer + offset).</_long>
+		<category>Window Management</category>
+	</plugin>
+</wayfire>
