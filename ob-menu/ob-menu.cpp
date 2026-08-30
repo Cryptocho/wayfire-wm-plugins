@@ -5,6 +5,7 @@
 
 #include <wayfire/plugin.hpp>
 #include <wayfire/per-output-plugin.hpp>
+#include <wayfire/signal-definitions.hpp>
 #include <wayfire/output.hpp>
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
@@ -47,6 +48,28 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
         menu_runtime->open_root(id, anchor);
     }
 
+    void open_client_at_titlebar()
+    {
+        auto view = wf::toplevel_cast(
+            wf::get_core().seat->get_active_view());
+        if (!view)
+        {
+            return;
+        }
+
+        if (!menu_runtime)
+        {
+            menu_runtime = std::make_unique<OutputMenu>(output);
+        }
+
+        if (menu_runtime->is_open())
+        {
+            menu_runtime->close_all();
+        }
+
+        menu_runtime->open_client_menu(view);
+    }
+
     OutputMenu *get_runtime()
     {
         return menu_runtime.get();
@@ -54,11 +77,18 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
 
   private:
     wf::option_wrapper_t<wf::keybinding_t> key_root{"ob-menu/key_root_menu"};
+    wf::option_wrapper_t<wf::keybinding_t> key_client{"ob-menu/key_client_menu"};
     wf::key_callback on_key_root = [=] (auto)
     {
         open_menu_at("root-menu", output->get_cursor_position());
         return true;
     };
+    wf::key_callback on_key_client = [=] (auto)
+    {
+        open_client_at_titlebar();
+        return true;
+    };
+
     std::unique_ptr<OutputMenu> menu_runtime;
 };
 
@@ -108,8 +138,6 @@ class wayfire_ob_menu : public wf::plugin_interface_t
             wf::json_t r;
             auto output = wf::get_core().seat->get_active_output();
             auto *inst  = outputs.get(output);
-            auto *rt    = inst ? inst->get_runtime() : nullptr;
-
             if ((op == "open-root") && inst)
             {
                 wf::pointf_t anchor = {100, 100};
@@ -126,9 +154,16 @@ class wayfire_ob_menu : public wf::plugin_interface_t
                 inst->open_menu_at(data.has_member("menu") ?
                     (std::string)data["menu"] : "root-menu", anchor);
             }
-            else if ((op == "close") && rt)
+
+            /* re-take the runtime AFTER open-root may have created it */
+            auto *rt = inst ? inst->get_runtime() : nullptr;
+            if ((op == "close") && rt)
             {
                 rt->close_all();
+            }
+            else if ((op.rfind("nav:", 0) == 0) && rt)
+            {
+                rt->handle_nav_key(op.substr(4));
             }
 
             if (rt)

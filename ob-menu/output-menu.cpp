@@ -11,6 +11,7 @@
 #include <cairo.h>
 #include <pango/pangocairo.h>
 #include <linux/input-event-codes.h>
+#include <wayfire/workarea.hpp>
 
 #include <algorithm>
 #include <map>
@@ -150,6 +151,30 @@ static uint64_t now_msec_impl()
     return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+/* Next selectable item index at/after @from (wrapping; dir is +/-1).
+ * Free function taking an explicit Menu* — must not capture a reference into
+ * the open stack, which is reallocated when a submenu level is pushed. */
+static int next_selectable_in(Menu *menu, int from, int dir)
+{
+    const int n = (int)menu->items.size();
+    if (n == 0)
+    {
+        return -1;
+    }
+
+    int i = from;
+    for (int step = 0; step < n; step++)
+    {
+        i = (i + dir + n) % n;
+        if (menu->items[i]->selectable)
+        {
+            return i;
+        }
+    }
+
+    return from;
+}
+
 uint64_t OutputMenu::now_msec()
 {
     return now_msec_impl();
@@ -218,23 +243,17 @@ void OutputMenu::open_root(const std::string &id, wf::pointf_t anchor)
 
     if (stack.empty())
     {
-        LOGE("DBG open: grabbing");
         this->input_grab->grab_input(wf::scene::layer::OVERLAY);
         opened_by_press = true;
         open_msec       = now_msec_impl();
-        LOGE("DBG open: mounting node");
         wf::scene::add_front(
             output->node_for_layer(wf::scene::layer::TOP), node);
-        LOGE("DBG open: mounted");
     }
 
     OpenLevel level;
-    LOGE("DBG open: layout");
     layout_level(level, menu, {(int)anchor.x, (int)anchor.y});
     stack.push_back(std::move(level));
-    LOGE("DBG open: damage");
     sync_damage();
-    LOGE("DBG open: done");
 }
 
 void OutputMenu::close_all(bool restore)
@@ -348,25 +367,34 @@ void OutputMenu::handle_pointer_motion_impl(wf::pointf_t global)
         return;
     }
 
+    /* find the deepest level containing the cursor */
+    int hit_level = -1, hit_item = -1;
     for (size_t d = 0; d < stack.size(); d++)
     {
-        auto &level = stack[d];
-        int new_sel = -1;
-        for (size_t i = 0; i < level.item_rects.size(); i++)
+        for (size_t i = 0; i < stack[d].item_rects.size(); i++)
         {
-            if ((level.item_rects[i] & wf::point_t{(int)global.x,
-                (int)global.y}) && level.menu->items[i]->selectable)
+            if ((stack[d].item_rects[i] & wf::point_t{(int)global.x,
+                (int)global.y}) && stack[d].menu->items[i]->selectable)
             {
-                new_sel = (int)i;
-                break;
+                hit_level = (int)d;
+                hit_item  = (int)i;
             }
         }
+    }
 
-        if (new_sel != level.selected)
-        {
-            level.selected = new_sel;
-            sync_damage();
-        }
+    if (hit_level < 0)
+    {
+        return; /* outside all menus; outside-click closes */
+    }
+
+    close_to_level(hit_level + 1);
+    stack[hit_level].selected = hit_item;
+    sync_damage();
+
+    auto *item = stack[hit_level].menu->items[hit_item].get();
+    if (item->submenu)
+    {
+        open_submenu(hit_level, item);
     }
 }
 
@@ -449,24 +477,266 @@ wf::json_t OutputMenu::get_state()
         r["menu_id"] = stack[0].menu->id;
         r["items"]   = (uint64_t)stack[0].menu->items.size();
         r["selected"] = stack[0].selected;
+        wf::json_t lv = wf::json_t::array();
+        for (auto &level : stack)
+        {
+            wf::json_t j;
+            j["menu_id"] = level.menu->id;
+            j["items"]   = (uint64_t)level.menu->items.size();
+            j["selected"] = level.selected;
+            lv.append(j);
+        }
+
+        r["stack"] = lv;
     }
 
     return r;
 }
 
-void OutputMenu::handle_keyboard_key(wf::seat_t*, wlr_keyboard_key_event)
+void OutputMenu::handle_keyboard_key(wf::seat_t*, wlr_keyboard_key_event event)
 {
-    /* M4 */
+    if (event.state != WL_KEYBOARD_KEY_STATE_PRESSED)
+    {
+        return;
+    }
+
+    /* xkb keycodes are evdev codes + 8 */
+    const int ev = (int)event.keycode - 8;
+    static const std::pair<int, const char*> keys[] = {
+        {KEY_UP, "up"}, {KEY_DOWN, "down"},
+        {KEY_LEFT, "left"}, {KEY_RIGHT, "right"},
+        {KEY_ENTER, "enter"}, {KEY_KPENTER, "enter"},
+        {KEY_ESC, "escape"},
+    };
+    for (auto &[code, name] : keys)
+    {
+        if (ev == code)
+        {
+            handle_nav_key(name);
+            return;
+        }
+    }
+
+    /* accelerators: KEY_A..KEY_Z are contiguous */
+    if ((ev >= KEY_A) && (ev <= KEY_Z))
+    {
+        handle_nav_key(std::string("accel:") +
+            (char)('a' + (ev - KEY_A)));
+    }
 }
 
-void OutputMenu::open_submenu(OpenLevel&, MenuItem*)
+void OutputMenu::handle_nav_key(const std::string &key)
 {
-    /* M4 */
+    if (stack.empty())
+    {
+        return;
+    }
+
+    auto &level = stack.back();
+
+    if (key == "escape")
+    {
+        if (stack.size() == 1)
+        {
+            close_all();
+        } else
+        {
+            close_to_level(stack.size() - 1);
+        }
+
+        sync_damage();
+        return;
+    }
+
+    if (key == "down")
+    {
+        level.selected = next_selectable_in(level.menu, level.selected, +1);
+        sync_damage();
+        return;
+    }
+
+    if (key == "up")
+    {
+        level.selected = next_selectable_in(level.menu, level.selected, -1);
+        sync_damage();
+        return;
+    }
+
+    if ((key == "right") || (key == "enter"))
+    {
+        if ((level.selected >= 0) &&
+            level.menu->items[level.selected]->submenu)
+        {
+            auto *item = level.menu->items[level.selected].get();
+            open_submenu(stack.size() - 1, item);
+            /* select first selectable in the child; re-take the reference
+             * AFTER open_submenu pushed (the stack vector reallocates) */
+            if (stack.size() > 1)
+            {
+                auto &child = stack.back();
+                child.selected = next_selectable_in(child.menu, -1, +1);
+            }
+
+            sync_damage();
+            return;
+        }
+
+        if (key == "enter")
+        {
+            if ((level.selected >= 0) &&
+                (level.menu->items[level.selected]->type == ItemType::Item))
+            {
+                auto *item = level.menu->items[level.selected].get();
+                close_all();
+                run_actions(item);
+            }
+        }
+
+        return;
+    }
+
+    if (key == "left")
+    {
+        if (stack.size() > 1)
+        {
+            close_to_level(stack.size() - 1);
+            sync_damage();
+        }
+
+        return;
+    }
+
+    if (key.rfind("accel:", 0) == 0)
+    {
+        char letter = key[6];
+        for (size_t i = 0; i < level.menu->items.size(); i++)
+        {
+            auto &item = level.menu->items[i];
+            if ((item->accelerator >= 0) &&
+                (item->accelerator + 1 < (int)item->text.size()) &&
+                (tolower((unsigned char)item->text[item->accelerator + 1]) ==
+                    letter))
+            {
+                level.selected = (int)i;
+                sync_damage();
+                if (item->submenu)
+                {
+                    open_submenu(stack.size() - 1, item.get());
+                }
+
+                return;
+            }
+        }
+    }
 }
 
-void OutputMenu::close_to_level(size_t)
+void OutputMenu::open_client_menu(wayfire_toplevel_view view)
 {
-    /* M4 */
+    if (!view)
+    {
+        return;
+    }
+
+    focused_view = view;
+    auto g = view->get_geometry();
+    open_root("client-menu", wf::pointf_t{(double)g.x + 24, (double)g.y + 8});
+}
+
+void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
+{
+    if (!item->submenu)
+    {
+        return;
+    }
+
+    /* already open as the next level? */
+    if ((stack.size() > level_idx + 1) &&
+        (stack[level_idx + 1].via_item == item))
+    {
+        return;
+    }
+
+    close_to_level(level_idx + 1);
+    auto &parent = stack[level_idx];
+    auto &state  = MenuState::get();
+    const int ox = ob_theme_menu_overlap_x(state.ob);
+    const int oy = ob_theme_menu_overlap_y(state.ob);
+    const int b  = ob_theme_menu_border_width(state.ob);
+
+    /* measure child size */
+    const int px = ob_theme_menu_items_padding_x(state.ob);
+    const int ih = ob_theme_menu_item_height(state.ob);
+    int max_w = 0;
+    for (auto &it : item->submenu->items)
+    {
+        max_w = std::max(max_w, measure_text_width(it->text, ""));
+    }
+
+    int w = max_w + 2 * px + 2 * b;
+    if (item->submenu->width_min > 0)
+    {
+        w = std::max(w, item->submenu->width_min);
+    }
+
+    if (item->submenu->width_max > 0)
+    {
+        w = std::min(w, item->submenu->width_max);
+    }
+
+    int h = 2 * b + (int)item->submenu->items.size() * ih;
+    const auto &anchor_rect = parent.item_rects[
+        parent.selected >= 0 ? parent.selected : 0];
+    const auto &outg = output->get_layout_geometry();
+
+    /* position like labwc: parent align_left -> child opens to the left */
+    int x = parent.align_left ?
+        (anchor_rect.x - w + ox + b) :
+        (anchor_rect.x + anchor_rect.width - ox - b);
+    int y = anchor_rect.y - oy;
+
+    /* unconstrain against the workarea (XDG positioner rules) */
+    /* own unconstrain (equivalent to the XDG positioner
+     * FLIP_X|SLIDE_X|SLIDE_Y adjustments vs the workarea) */
+    wlr_box box{x + outg.x, y + outg.y, w, h};
+    wlr_box usable = output->workarea->get_workarea();
+    if (box.x + (int)box.width > usable.x + usable.width)
+    {
+        box.x = usable.x + usable.width - box.width;
+    }
+
+    if (box.x < usable.x)
+    {
+        box.x = usable.x;
+    }
+
+    if (box.y + (int)box.height > usable.y + usable.height)
+    {
+        box.y = usable.y + usable.height - box.height;
+    }
+
+    if (box.y < usable.y)
+    {
+        box.y = usable.y;
+    }
+
+    OpenLevel child;
+    child.menu = item->submenu;
+    child.via_item = item;
+    layout_level(child, item->submenu, {box.x - outg.x, box.y - outg.y});
+    child.align_left = box.x < anchor_rect.x;
+    stack.push_back(std::move(child));
+    sync_damage();
+}
+
+void OutputMenu::close_to_level(size_t depth)
+{
+    if (stack.size() <= depth)
+    {
+        return;
+    }
+
+    stack.resize(depth);
+    sync_damage();
 }
 
 void OutputMenu::activate(MenuItem *item)

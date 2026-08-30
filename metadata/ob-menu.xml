@@ -24,6 +24,11 @@
 			<_long>Empty value inherits ob-menu/font.</_long>
 			<default>sans 10</default>
 		</option>
+		<option name="key_client_menu" type="key">
+			<_short>Client menu</_short>
+			<_long>Opens the client-menu at the titlebar of the focused window.</_long>
+			<default>&lt;alt&gt; KEY_SPACE</default>
+		</option>
 		<option name="key_root_menu" type="key">
 			<_short>Root menu</_short>
 			<_long>Opens the root menu at the cursor position.</_long>

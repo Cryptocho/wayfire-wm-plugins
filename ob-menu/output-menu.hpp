@@ -14,6 +14,9 @@
 #include <wayfire/nonstd/json.hpp>
 
 #include <wayfire/debug.hpp>
+#include <wayfire/toplevel-view.hpp>
+
+#include <linux/input-event-codes.h>
 
 #include <memory>
 #include <vector>
@@ -30,6 +33,15 @@ class OutputMenu : public wf::pointer_interaction_t,
 
     /** Open a menu tree at the given output-local anchor point. */
     void open_root(const std::string &id, wf::pointf_t anchor);
+
+    /** Open the client-menu anchored to the titlebar of @view. */
+    void open_client_menu(wayfire_toplevel_view view);
+
+    /** Remember the last focused toplevel (for client-menu actions). */
+    void set_focused_view(wayfire_toplevel_view view)
+    {
+        focused_view = view;
+    }
 
     /** @return Whether a menu tree is currently open on this output. */
     bool is_open() const
@@ -58,6 +70,9 @@ class OutputMenu : public wf::pointer_interaction_t,
 
     void handle_keyboard_key(wf::seat_t *seat,
         wlr_keyboard_key_event event) override;
+
+    /* Navigation shared by real keys and IPC-simulated keys. */
+    void handle_nav_key(const std::string &key);
     void handle_touch_down(uint32_t, int, wf::pointf_t position) override
     {
         handle_pointer_motion(position);
@@ -93,6 +108,7 @@ class OutputMenu : public wf::pointer_interaction_t,
     };
 
     wf::output_t *output;
+    wayfire_toplevel_view focused_view;
     std::unique_ptr<wf::input_grab_t> input_grab;
     class MenuNode;
     class MenuRenderInstance;
@@ -103,7 +119,7 @@ class OutputMenu : public wf::pointer_interaction_t,
     uint64_t open_msec   = 0;
 
     void layout_level(OpenLevel &level, Menu *menu, wf::point_t pos);
-    void open_submenu(OpenLevel &parent_level, MenuItem *item);
+    void open_submenu(size_t level_idx, MenuItem *item);
     void close_to_level(size_t depth);
     void sync_damage();
     void activate(MenuItem *item);
