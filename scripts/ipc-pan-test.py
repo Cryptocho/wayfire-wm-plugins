@@ -70,6 +70,43 @@ check("bad dir rejected", "error" in r, r)
 r = call("proto-pan/step", {})
 check("missing dir rejected", "error" in r, r)
 
+# ---- drag simulation (same code path as real swipe gestures) ----
+# Nearest-tile snap on end; natural feel: dx>0 = content follows fingers right.
+
+r = call("proto-pan/drag", {"op": "dx", "dx": 100})
+check("dx before begin rejected", "error" in r, r)
+
+r = call("proto-pan/drag", {"op": "begin"})
+check("drag begin", r.get("swiping") is True and r.get("drag_px") == 0, r)
+
+r = call("proto-pan/drag", {"op": "begin"})
+check("double begin rejected", "error" in r, r)
+
+r = call("proto-pan/drag", {"op": "dx", "dx": -600})
+check("drag -600 -> offset -600", r.get("drag_px") == -600 and r.get("offset") == -600, r)
+
+r = call("proto-pan/drag", {"op": "end"})
+check("snap back to tile 0 (<half)", r.get("tile") == 0 and r.get("offset") == 0 and
+    r.get("swiping") is False, r)
+
+call("proto-pan/drag", {"op": "begin"})
+r = call("proto-pan/drag", {"op": "dx", "dx": -700})
+r = call("proto-pan/drag", {"op": "end"})
+check("snap to tile 1 (>half)", r.get("tile") == 1 and r.get("offset") == -W, r)
+
+call("proto-pan/drag", {"op": "begin"})
+r = call("proto-pan/drag", {"op": "dx", "dx": 2000})
+# content_x = clamp(2000 - 1*W, -(N-1)*W, 0) = 0 (clamped at rail start)
+check("overdrag clamped at content_x<=0", r.get("offset") == 0, r)
+r = call("proto-pan/drag", {"op": "end"})
+check("big swipe back -> tile 0", r.get("tile") == 0 and r.get("offset") == 0, r)
+
+call("proto-pan/drag", {"op": "begin"})
+r = call("proto-pan/drag", {"op": "dx", "dx": -3000})
+check("far drag clamped at rail end", r.get("offset") == -2 * W, r)
+r = call("proto-pan/drag", {"op": "end"})
+check("far drag -> last tile", r.get("tile") == 2 and r.get("offset") == -2 * W, r)
+
 if failures:
     print(f"IPC TEST FAIL: {len(failures)} failure(s)")
     sys.exit(1)

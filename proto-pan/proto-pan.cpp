@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <vector>
 #include <wayfire/per-output-plugin.hpp>
@@ -12,18 +13,23 @@
 #include <wayfire/signal-definitions.hpp>
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
+#include <wayfire/plugins/common/input-grab.hpp>
 #include <wayfire/debug.hpp>
 
 /**
  * proto-pan: P0 prototype for the scrolling layout's core risk mechanism —
  * a plugin-owned scene sublayer whose content can be freely panned.
  *
- * S3: keyboard step-pan (<super>F1/F2) with proper damage handling, adoption
- * of the first mapped toplevel into the rail, and IPC methods (pan/step,
- * pan/get-state) so pan state can be verified without input devices.
+ * S4: continuous pan driven by touchpad swipe gestures (vswipe pattern) on
+ * top of the S3 keyboard step-pan. The pan control is factored into
+ * begin/update/end functions shared by both input paths and by the
+ * proto-pan/drag IPC method (used for automated tests, since gestures
+ * cannot be injected headlessly).
  *
- * Pan model: rail of N_TILES screens; state = tile index i + continuous drag
- * (unused in S3). offset_x = clamp(-(i*W + drag_px), -(N-1)*W, 0).
+ * Pan model: rail of N_TILES screens. Content displacement:
+ *   content_x = clamp(drag_px - tile_index * W, -(N_TILES-1)*W, 0)
+ * where drag_px follows the fingers (natural scrolling: fingers right =
+ * content right). On gesture end, snap to the nearest tile.
  */
 class proto_pan_output_t : public wf::per_output_plugin_instance_t
 {
@@ -37,9 +43,18 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
         output->add_key(key_right, &on_step_right);
         output->connect(&on_view_mapped);
 
+        input_grab = std::make_unique<wf::input_grab_t>("proto-pan", output);
+        wf::get_core().connect(&on_swipe_begin);
+        wf::get_core().connect(&on_swipe_update);
+        wf::get_core().connect(&on_swipe_end);
+
         ipc_repo->register_method("proto-pan/step", [this] (wf::json_t data)
         {
             return ipc_step(data);
+        });
+        ipc_repo->register_method("proto-pan/drag", [this] (wf::json_t data)
+        {
+            return ipc_drag(data);
         });
         ipc_repo->register_method("proto-pan/get-state", [this] (wf::json_t)
         {
@@ -50,7 +65,9 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
     void fini() override
     {
         ipc_repo->unregister_method("proto-pan/step");
+        ipc_repo->unregister_method("proto-pan/drag");
         ipc_repo->unregister_method("proto-pan/get-state");
+        cancel_pan();
         teardown_pan_rail();
         LOGI("proto-pan fini on ", output->to_string());
     }
@@ -64,9 +81,11 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
     std::shared_ptr<wf::scene::translation_node_t> pan_node;
     std::vector<std::shared_ptr<wf::color_rect_view_t>> rects;
 
-    /* Pan state: current tile index + continuous drag amount (px, S4). */
+    /* Pan state: current tile index + continuous drag (px, follows fingers). */
     int tile_index = 0;
     int drag_px = 0;
+    double drag_accum = 0.0; /* sub-pixel accumulator while swiping */
+    bool swiping = false;
 
     /* First toplevel adopted into the rail (prototype handles exactly one). */
     bool has_pan_view = false;
@@ -76,6 +95,16 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
     wf::option_wrapper_t<wf::keybinding_t> key_right{"proto-pan/key_right"};
     wf::key_callback on_step_left  = [=] (auto) { step(-1); return true; };
     wf::key_callback on_step_right = [=] (auto) { step(+1); return true; };
+
+    wf::option_wrapper_t<int> swipe_fingers{"proto-pan/swipe_fingers"};
+
+    /* Input grab during a swipe (vswipe pattern, plugins/single_plugins/vswipe.cpp). */
+    std::unique_ptr<wf::input_grab_t> input_grab;
+    wf::plugin_activation_data_t grab_interface = {
+        .name = "proto-pan",
+        .capabilities = wf::CAPABILITY_GRAB_INPUT,
+        .cancel = [=] () { cancel_pan(); },
+    };
 
     wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
 
@@ -97,6 +126,114 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
         LOGI("proto-pan: adopted view '", toplevel->get_title(),
             "' into the rail at x=", size.width);
     };
+
+    template<class wlr_event>
+    using event = wf::input_event_signal<wlr_event>;
+
+    wf::signal::connection_t<event<wlr_pointer_swipe_begin_event>> on_swipe_begin =
+        [=] (event<wlr_pointer_swipe_begin_event> *ev)
+    {
+        if ((int)ev->event->fingers != swipe_fingers)
+        {
+            return;
+        }
+
+        /* Plugins are per-output; handle the swipe only on our output. */
+        if (!(output->get_relative_geometry() & output->get_cursor_position()))
+        {
+            return;
+        }
+
+        begin_pan();
+    };
+
+    wf::signal::connection_t<event<wlr_pointer_swipe_update_event>> on_swipe_update =
+        [=] (event<wlr_pointer_swipe_update_event> *ev)
+    {
+        if (!swiping)
+        {
+            return;
+        }
+
+        update_pan(ev->event->dx);
+    };
+
+    wf::signal::connection_t<event<wlr_pointer_swipe_end_event>> on_swipe_end =
+        [=] (event<wlr_pointer_swipe_end_event> *ev)
+    {
+        if (!swiping)
+        {
+            return;
+        }
+
+        end_pan();
+    };
+
+    /* ---------------- pan control (shared by keys/swipe/IPC) ---------------- */
+
+    bool begin_pan()
+    {
+        if (swiping || !output->activate_plugin(&grab_interface))
+        {
+            return false;
+        }
+
+        swiping    = true;
+        drag_accum = 0.0;
+        input_grab->grab_input(wf::scene::layer::OVERLAY);
+        wf::get_core().seat->focus_output(output);
+        return true;
+    }
+
+    void update_pan(double dx)
+    {
+        if (!swiping)
+        {
+            return;
+        }
+
+        drag_accum += dx;
+        drag_px = (int)std::round(drag_accum);
+        apply_offset();
+    }
+
+    void end_pan()
+    {
+        if (!swiping)
+        {
+            return;
+        }
+
+        swiping = false;
+        /* Snap to the tile nearest to the current (clamped) position. */
+        auto W = output->get_screen_size().width;
+        tile_index = std::clamp((int)std::round(-(double)current_content_x() / W),
+            0, N_TILES - 1);
+        drag_px    = 0;
+        drag_accum = 0.0;
+        apply_offset();
+        input_grab->ungrab_input();
+        output->deactivate_plugin(&grab_interface);
+        LOGI("proto-pan swipe end: i=", tile_index, " offset=",
+            pan_node->get_offset().x);
+    }
+
+    void cancel_pan()
+    {
+        if (!swiping)
+        {
+            return;
+        }
+
+        swiping    = false;
+        drag_px    = 0;
+        drag_accum = 0.0;
+        apply_offset();
+        input_grab->ungrab_input();
+        output->deactivate_plugin(&grab_interface);
+    }
+
+    /* ------------------------------------------------------------------------ */
 
     void setup_pan_rail()
     {
@@ -126,17 +263,20 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
             ", pan_node bbox=", pan_node->get_bounding_box());
     }
 
+    /* Content displacement of the rail, clamped to the rail ends. */
+    int current_content_x() const
+    {
+        auto W = output->get_screen_size().width;
+        return std::clamp(drag_px - tile_index * W, -(N_TILES - 1) * W, 0);
+    }
+
     /** Offset-change pattern from src/view/layer-shell/layer-shell.cpp:99-110:
      * damage the union of old/new bounding boxes (in output coordinates!),
      * then update with the GEOMETRY flag. */
     void apply_offset()
     {
-        auto W = output->get_screen_size().width;
-        int max_offset = (N_TILES - 1) * W;
-        int offset_x   = std::clamp(-(tile_index * W + drag_px), -max_offset, 0);
-
         wf::region_t damage = pan_node->get_bounding_box();
-        pan_node->set_offset({offset_x, 0});
+        pan_node->set_offset({current_content_x(), 0});
         damage |= pan_node->get_bounding_box();
         wf::scene::damage_node(pan_node, damage);
         wf::scene::update(pan_node, wf::scene::update_flag::GEOMETRY);
@@ -145,7 +285,8 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
     void step(int dir)
     {
         tile_index = std::clamp(tile_index + dir, 0, N_TILES - 1);
-        drag_px = 0;
+        drag_px    = 0;
+        drag_accum = 0.0;
         apply_offset();
         LOGI("proto-pan step: i=", tile_index, " offset=", pan_node->get_offset().x);
     }
@@ -157,6 +298,7 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
         r["tiles"]   = N_TILES;
         r["offset"]  = pan_node ? pan_node->get_offset().x : 0;
         r["drag_px"] = drag_px;
+        r["swiping"] = swiping;
         r["has_view"] = has_pan_view;
         return r;
     }
@@ -176,6 +318,43 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
 
         step(dir);
         return get_state_json();
+    }
+
+    /** Simulate a swipe for automated tests: {"op":"begin"} / {"op":"dx","dx":N}
+     * / {"op":"end"} — exercises the same code path as real gestures. */
+    wf::json_t ipc_drag(wf::json_t data)
+    {
+        if (!data.has_member("op"))
+        {
+            return wf::ipc::json_error("missing 'op'");
+        }
+
+        std::string op = data["op"];
+        if (op == "begin")
+        {
+            return begin_pan() ? get_state_json() :
+                   wf::ipc::json_error("cannot begin (already swiping or plugin busy)");
+        } else if (op == "dx")
+        {
+            if (!swiping)
+            {
+                return wf::ipc::json_error("not swiping (send op=begin first)");
+            }
+
+            if (!data.has_member("dx"))
+            {
+                return wf::ipc::json_error("missing 'dx'");
+            }
+
+            update_pan((double)data["dx"]);
+            return get_state_json();
+        } else if (op == "end")
+        {
+            end_pan();
+            return get_state_json();
+        }
+
+        return wf::ipc::json_error("op must be begin|dx|end");
     }
 
     void teardown_pan_rail()

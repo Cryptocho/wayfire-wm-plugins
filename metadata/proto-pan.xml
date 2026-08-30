@@ -14,5 +14,10 @@
 			<_long>Steps the pan rail one screen to the right.</_long>
 			<default>&lt;super&gt; KEY_F2</default>
 		</option>
+		<option name="swipe_fingers" type="int">
+			<_short>Swipe fingers</_short>
+			<_long>Number of touchpad fingers that trigger the continuous pan swipe.</_long>
+			<default>3</default>
+		</option>
 	</plugin>
 </wayfire>
