@@ -50,7 +50,7 @@ EOF
 
 | 步骤 | 操作 | 预期 |
 |---|---|---|
-| 1 | 嵌套会话内按 `<super>Enter` | kitty 启动,**但画面仍是紫色**——kitty 被收编到了 tile 1(日志 `adopted view 'kitty'`) |
+| 1 | 嵌套会话内按 `<super>T`(`<super>Enter` 已被主桌面占用) | kitty 启动,**但画面仍是紫色**——kitty 被收编到了 tile 1(日志 `adopted view 'kitty'`) |
 | 2 | `<super>F2` | 绿色出现,kitty 叠在其上(它在 x=1280 等着你) |
 | 3 | **点击 kitty 并输入命令**(如 `echo hi`) | 能聚焦、能打字 → **输入命中跟随平移 ✓(本原型最关键验证点)** |
 | 4 | `<super>F1` 回 tile 0,点击 kitty 原本的位置 | 不应命中任何东西(视口外),光标行为如常 |
