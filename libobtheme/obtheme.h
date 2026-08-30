@@ -16,6 +16,13 @@
 extern "C" {
 #endif
 
+enum ob_font_place
+{
+	OB_FONT_TITLEBAR = 0,
+	OB_FONT_MENUITEM,
+	OB_FONT_MENUHEADER,
+};
+
 struct ob_theme_config {
 	/* Theme name searched in $XDG_DATA_HOME/themes, ~/.themes and
 	 * $XDG_DATA_DIRS/themes as <name>/labwc/themerc then
@@ -30,6 +37,9 @@ struct ob_theme_config {
 	/* Pango font description string for the titlebar, e.g. "sans 10".
 	 * NULL = "sans 10". themerc carries no window fonts (same as labwc). */
 	const char *font;
+	/* Menu fonts; NULL = same as @font. */
+	const char *font_menuitem;
+	const char *font_menuheader;
 	int corner_radius; /* <=0 = square corners */
 };
 
@@ -124,6 +134,117 @@ static inline cairo_surface_t *ob_theme_titlebar_fill(const struct theme *t,
  * side (0 = left, 1 = right). Returns the count (<= max). */
 int ob_theme_title_buttons(const struct theme *t, int side,
 	enum lab_node_type *out, int max);
+
+/* ---- menu theme accessors (themerc menu.* keys) ---- */
+static inline int ob_theme_menu_item_height(const struct theme *t)
+{
+	return t->menu_item_height;
+}
+
+static inline int ob_theme_menu_header_height(const struct theme *t)
+{
+	return t->menu_header_height;
+}
+
+static inline int ob_theme_menu_overlap_x(const struct theme *t)
+{
+	return t->menu_overlap_x;
+}
+
+static inline int ob_theme_menu_overlap_y(const struct theme *t)
+{
+	return t->menu_overlap_y;
+}
+
+static inline int ob_theme_menu_min_width(const struct theme *t)
+{
+	return t->menu_min_width;
+}
+
+static inline int ob_theme_menu_max_width(const struct theme *t)
+{
+	return t->menu_max_width;
+}
+
+static inline int ob_theme_menu_border_width(const struct theme *t)
+{
+	return t->menu_border_width;
+}
+
+static inline const float *ob_theme_menu_border_color(const struct theme *t)
+{
+	return t->menu_border_color;
+}
+
+static inline int ob_theme_menu_items_padding_x(const struct theme *t)
+{
+	return t->menu_items_padding_x;
+}
+
+static inline int ob_theme_menu_items_padding_y(const struct theme *t)
+{
+	return t->menu_items_padding_y;
+}
+
+static inline const float *ob_theme_menu_items_bg(const struct theme *t)
+{
+	return t->menu_items_bg_color;
+}
+
+static inline const float *ob_theme_menu_items_text(const struct theme *t)
+{
+	return t->menu_items_text_color;
+}
+
+static inline const float *ob_theme_menu_items_active_bg(const struct theme *t)
+{
+	return t->menu_items_active_bg_color;
+}
+
+static inline const float *ob_theme_menu_items_active_text(
+	const struct theme *t)
+{
+	return t->menu_items_active_text_color;
+}
+
+static inline int ob_theme_menu_separator_thickness(const struct theme *t)
+{
+	return t->menu_separator_line_thickness;
+}
+
+static inline int ob_theme_menu_separator_padding_width(const struct theme *t)
+{
+	return t->menu_separator_padding_width;
+}
+
+static inline int ob_theme_menu_separator_padding_height(const struct theme *t)
+{
+	return t->menu_separator_padding_height;
+}
+
+static inline const float *ob_theme_menu_separator_color(const struct theme *t)
+{
+	return t->menu_separator_color;
+}
+
+static inline const float *ob_theme_menu_title_bg(const struct theme *t)
+{
+	return t->menu_title_bg_color;
+}
+
+static inline const float *ob_theme_menu_title_text(const struct theme *t)
+{
+	return t->menu_title_text_color;
+}
+
+static inline enum lab_justification ob_theme_menu_title_justify(
+	const struct theme *t)
+{
+	return t->menu_title_text_justify;
+}
+
+/* Height (px) of the font for the given place (OB_FONT_*). */
+int ob_theme_font_height(int place);
 
 /* ---- button rendering ---- */
 

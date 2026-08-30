@@ -158,6 +158,26 @@ int main(int argc, char **argv)
 		ob_theme_border_color(theme, OB_THEME_ACTIVE));
 	hex_value("border_color_inactive",
 		ob_theme_border_color(theme, OB_THEME_INACTIVE));
+	/* menu.* theme section (labwc keys, parsed by vendored theme.c) */
+	set_value("menu_border_width", "%d", ob_theme_menu_border_width(theme));
+	hex_value("menu_border_color", ob_theme_menu_border_color(theme));
+	set_value("menu_items_padding_x", "%d",
+		ob_theme_menu_items_padding_x(theme));
+	set_value("menu_items_padding_y", "%d",
+		ob_theme_menu_items_padding_y(theme));
+	hex_value("menu_items_bg", ob_theme_menu_items_bg(theme));
+	hex_value("menu_items_text", ob_theme_menu_items_text(theme));
+	hex_value("menu_items_active_bg", ob_theme_menu_items_active_bg(theme));
+	hex_value("menu_items_active_text",
+		ob_theme_menu_items_active_text(theme));
+	set_value("menu_separator_thickness", "%d",
+		ob_theme_menu_separator_thickness(theme));
+	hex_value("menu_separator_color", ob_theme_menu_separator_color(theme));
+	hex_value("menu_title_bg", ob_theme_menu_title_bg(theme));
+	hex_value("menu_title_text", ob_theme_menu_title_text(theme));
+	set_value("menu_title_justify", "%s",
+		justify_str(ob_theme_menu_title_justify(theme)));
+
 	hex_value("label_color_active",
 		ob_theme_label_text_color(theme, OB_THEME_ACTIVE));
 	hex_value("label_color_inactive",

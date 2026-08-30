@@ -109,34 +109,41 @@ static void parse_titlebar_layout(const char *layout)
 	free(dup);
 }
 
-static void set_fonts(const char *font)
+static void apply_font(struct font *target, PangoFontDescription *desc)
 {
-	PangoFontDescription *desc =
-		pango_font_description_from_string(font ? font : "sans 10");
-
-	struct font *targets[] = {
-		&rc.font_activewindow,
-		&rc.font_inactivewindow,
-		&rc.font_menuheader,
-		&rc.font_menuitem,
-		&rc.font_osd,
-	};
-
 	const char *family = pango_font_description_get_family(desc);
 	int size = pango_font_description_get_size(desc) / PANGO_SCALE;
-	if (size <= 0) {
+	if (size <= 0)
+	{
 		size = 10;
 	}
 
-	for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++) {
-		free(targets[i]->name);
-		targets[i]->name   = strdup(family ? family : "sans");
-		targets[i]->size   = size;
-		targets[i]->slant  = pango_font_description_get_style(desc);
-		targets[i]->weight = pango_font_description_get_weight(desc);
-	}
+	free(target->name);
+	target->name   = strdup(family ? family : "sans");
+	target->size   = size;
+	target->slant  = pango_font_description_get_style(desc);
+	target->weight = pango_font_description_get_weight(desc);
+}
 
+static void set_fonts(const char *titlebar, const char *menuitem,
+	const char *menuheader)
+{
+	PangoFontDescription *desc = pango_font_description_from_string(
+		titlebar ? titlebar : "sans 10");
+	apply_font(&rc.font_activewindow, desc);
+	apply_font(&rc.font_inactivewindow, desc);
+	apply_font(&rc.font_osd, desc);
 	pango_font_description_free(desc);
+
+	PangoFontDescription *mi = pango_font_description_from_string(
+		menuitem ? menuitem : (titlebar ? titlebar : "sans 10"));
+	apply_font(&rc.font_menuitem, mi);
+	pango_font_description_free(mi);
+
+	PangoFontDescription *mh = pango_font_description_from_string(
+		menuheader ? menuheader : (titlebar ? titlebar : "sans 10"));
+	apply_font(&rc.font_menuheader, mh);
+	pango_font_description_free(mh);
 }
 
 int ob_theme_init(struct theme **out, struct ob_theme_config cfg)
@@ -159,7 +166,7 @@ int ob_theme_init(struct theme **out, struct ob_theme_config cfg)
 	rc.merge_config = false;
 	rc.corner_radius = cfg.corner_radius > 0 ? cfg.corner_radius : 0;
 	parse_titlebar_layout(cfg.titlebar_layout);
-	set_fonts(cfg.font);
+	set_fonts(cfg.font, cfg.font_menuitem, cfg.font_menuheader);
 
 	rc.theme = theme;
 
@@ -182,6 +189,21 @@ void ob_theme_finish(struct theme *theme)
 	theme_finish(theme);
 	rc.theme = NULL;
 	free(theme);
+}
+
+int ob_theme_font_height(int place)
+{
+	struct font *font = &rc.font_menuitem;
+	if (place == OB_FONT_MENUHEADER)
+	{
+		font = &rc.font_menuheader;
+	}
+	else if (place == OB_FONT_TITLEBAR)
+	{
+		font = &rc.font_activewindow;
+	}
+
+	return font_height(font);
 }
 
 int ob_theme_title_buttons(const struct theme *t, int side,
