@@ -36,5 +36,7 @@
   <item label="Exit">
     <action name="Exit" />
   </item>
+  <menu id="pipe-slow" label="Pipe_slow" execute="sleep 30" />
+  <menu id="pipe-huge" label="Pipe_huge" execute="head -c 2000000 /dev/zero | tr '\0' 'x'" />
 </menu>
 </openbox_menu>

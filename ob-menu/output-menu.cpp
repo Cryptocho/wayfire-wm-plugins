@@ -182,7 +182,7 @@ uint64_t OutputMenu::now_msec()
     return now_msec_impl();
 }
 
-OutputMenu::OutputMenu(wf::output_t *output) : output(output)
+OutputMenu::OutputMenu(wf::output_t *output) : output(output), pipe(this)
 {
     /* TEMP: no interactions while bisecting the grab crash */
     this->input_grab = std::make_unique<wf::input_grab_t>("ob-menu", output);
@@ -245,13 +245,29 @@ void OutputMenu::open_root(const std::string &id, wf::pointf_t anchor)
         return;
     }
 
-    if (stack.empty())
+    if (stack.empty() && !tree_active)
     {
         this->input_grab->grab_input(wf::scene::layer::OVERLAY);
         opened_by_press = true;
         open_msec       = now_msec_impl();
         wf::scene::add_front(
             output->node_for_layer(wf::scene::layer::TOP), node);
+        tree_active = true;
+    }
+
+    /* pipemenu: lazy spawn unless its content is already cached
+     * (labwc menu_open_root → open_pipemenu_async) */
+    if (!menu->execute.empty() && menu->items.empty())
+    {
+        if (!pipe.spawn_async(menu, nullptr,
+            {(int)anchor.x, (int)anchor.y}))
+        {
+            LOGE("ob-menu: pipemenu spawn failed for '", menu->id, "'");
+        }
+
+        /* tree stays active with an empty stack while waiting (labwc
+         * sets menu_current + grabs before the data arrives) */
+        return;
     }
 
     OpenLevel level;
@@ -262,12 +278,16 @@ void OutputMenu::open_root(const std::string &id, wf::pointf_t anchor)
 
 void OutputMenu::close_all(bool restore)
 {
-    if (stack.empty())
+    if (!tree_active)
     {
         return;
     }
 
+    /* cancel a pending pipemenu spawn + drop generated content so the
+     * next open re-spawns (labwc _close + reset_pipemenus) */
+    pipe.cancel();
     stack.clear();
+    tree_active = false;
     if (input_grab->is_grabbed())
     {
         input_grab->ungrab_input();
@@ -275,6 +295,7 @@ void OutputMenu::close_all(bool restore)
 
     wf::scene::remove_child(node);
     sync_damage();
+    reset_pipemenus(MenuState::get().set);
     (void)restore;
 }
 
@@ -371,6 +392,13 @@ void OutputMenu::handle_pointer_motion_impl(wf::pointf_t global)
         return;
     }
 
+    /* labwc menu_process_item_selection: no selection changes while a
+     * pipemenu is spawning */
+    if (pipe.waiting)
+    {
+        return;
+    }
+
     /* find the deepest level containing the cursor */
     int hit_level = -1, hit_item = -1;
     for (size_t d = 0; d < stack.size(); d++)
@@ -432,6 +460,32 @@ void OutputMenu::handle_pointer_button(const wlr_pointer_button_event& ev,
         return;
     }
 
+    if (pipe.waiting)
+    {
+        /* selection blocked while a pipemenu spawns (labwc); only an
+         * outside-click may dismiss the tree */
+        auto cur = output->get_cursor_position();
+        for (size_t d = 0; d < stack.size(); d++)
+        {
+            for (size_t i = 0; i < stack[d].item_rects.size(); i++)
+            {
+                if (stack[d].item_rects[i] & wf::point_t{(int)cur.x,
+                    (int)cur.y})
+                {
+                    return;
+                }
+            }
+        }
+
+        close_all();
+        if (dismissed)
+        {
+            *dismissed = true;
+        }
+
+        return;
+    }
+
     for (size_t d = 0; d < stack.size(); d++)
     {
         auto &level = stack[d];
@@ -461,6 +515,7 @@ wf::json_t OutputMenu::get_state()
 {
     wf::json_t r;
     r["open"] = is_open();
+    r["waiting"] = pipe.waiting;
     r["levels"] = (uint64_t)stack.size();
     if (!stack.empty())
     {
@@ -519,6 +574,19 @@ void OutputMenu::handle_nav_key(const std::string &key)
 {
     if (stack.empty())
     {
+        /* tree may still be active with an empty stack (pipemenu spawn
+         * pending or failed): only escape is meaningful */
+        if ((key == "escape") && tree_active)
+        {
+            close_all();
+        }
+
+        return;
+    }
+
+    /* labwc menu_process_item_selection: no selection while waiting */
+    if (pipe.waiting && (key != "escape"))
+    {
         return;
     }
 
@@ -526,7 +594,7 @@ void OutputMenu::handle_nav_key(const std::string &key)
 
     if (key == "escape")
     {
-        if (stack.size() == 1)
+        if (stack.size() <= 1)
         {
             close_all();
         } else
@@ -659,6 +727,24 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
     }
 
     close_to_level(level_idx + 1);
+
+    /* pipemenu submenu: lazy spawn unless cached (labwc
+     * menu_process_item_selection → open_pipemenu_async) */
+    if (!item->submenu->execute.empty() && item->submenu->items.empty())
+    {
+        auto &parent = stack[level_idx];
+        const auto &anchor_rect = parent.item_rects[
+            parent.selected >= 0 ? parent.selected : 0];
+        if (!pipe.spawn_async(item->submenu, item,
+            {anchor_rect.x, anchor_rect.y}))
+        {
+            LOGE("ob-menu: pipemenu spawn failed for '", item->submenu->id,
+                "'");
+        }
+
+        return;
+    }
+
     auto &parent = stack[level_idx];
     auto &state  = MenuState::get();
     const int ox = ob_theme_menu_overlap_x(state.ob);
@@ -739,6 +825,35 @@ void OutputMenu::close_to_level(size_t depth)
 
     stack.resize(depth);
     sync_damage();
+}
+
+void OutputMenu::open_pipe_level(PipeSpawn &sp)
+{
+    if (sp.via_item == nullptr)
+    {
+        /* pipemenu opened as root (ctx.anchor is the open anchor) */
+        OpenLevel level;
+        layout_level(level, sp.pipemenu, sp.anchor);
+        stack.push_back(std::move(level));
+        sync_damage();
+        return;
+    }
+
+    /* find the parent level that holds via_item (waiting blocked all
+     * selection changes, so it is still the level we spawned from) */
+    for (size_t d = stack.size(); d-- > 0;)
+    {
+        for (auto &it : stack[d].menu->items)
+        {
+            if (it.get() == sp.via_item)
+            {
+                open_submenu(d, sp.via_item);
+                return;
+            }
+        }
+    }
+
+    LOGE("ob-menu: pipemenu parent level vanished; dropping output");
 }
 
 void OutputMenu::activate(MenuItem *item)

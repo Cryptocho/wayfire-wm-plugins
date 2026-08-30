@@ -17,4 +17,11 @@ bool parse_menu_file(const std::string &path, MenuSet &set);
 /* Parse a menu.xml buffer (used for pipemenu output). */
 void parse_menu_buffer(const char *data, size_t len, MenuSet &set);
 
+/* labwc parse_buf(parent, buf): fill the children of a pipemenu script's
+ * output root element into @target. While parsing, id-only <menu>
+ * references are rejected (they could loop back to static menus) and all
+ * newly created menus are flagged is_pipemenu_child. */
+void parse_pipe_menu_buffer(const char *data, size_t len, Menu *target,
+    MenuSet &set);
+
 } // namespace obmenu

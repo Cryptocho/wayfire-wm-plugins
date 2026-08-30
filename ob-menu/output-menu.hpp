@@ -3,6 +3,7 @@
 #pragma once
 
 #include "menu-state.hpp"
+#include "menu-pipe.hpp"
 
 #include <wayfire/output.hpp>
 #include <wayfire/plugins/common/input-grab.hpp>
@@ -46,10 +47,11 @@ class OutputMenu : public wf::pointer_interaction_t,
         focused_view = view;
     }
 
-    /** @return Whether a menu tree is currently open on this output. */
+    /** @return Whether the menu system is active on this output (a tree is
+     * open, or a pipemenu spawn is pending that opened it). */
     bool is_open() const
     {
-        return !stack.empty();
+        return tree_active;
     }
 
     /** Selection state for IPC assertions. */
@@ -92,6 +94,10 @@ class OutputMenu : public wf::pointer_interaction_t,
     /* Render the open stack (called by the scene render instance). */
     void render(const wf::scene::render_instruction_t& data);
 
+    /* PipeRunner callback: open the parsed pipemenu (as root level when
+     * ctx.via_item == nullptr, else as the submenu of its parent item). */
+    void open_pipe_level(PipeSpawn &ctx);
+
     /* --- input entry points (called by the plugin's interactions) --- */
     void handle_pointer_motion_impl(wf::pointf_t global);
     void handle_pointer_button(const wlr_pointer_button_event& ev,
@@ -120,6 +126,10 @@ class OutputMenu : public wf::pointer_interaction_t,
     std::vector<OpenLevel> stack;
     bool opened_by_press = false;
     uint64_t open_msec   = 0;
+    /* menu system active (grab held, node mounted) even with an empty
+     * stack — a root pipemenu spawn is pending or failed */
+    bool tree_active = false;
+    PipeRunner pipe;
 
     void layout_level(OpenLevel &level, Menu *menu, wf::point_t pos);
     void open_submenu(size_t level_idx, MenuItem *item);
@@ -132,6 +142,7 @@ class OutputMenu : public wf::pointer_interaction_t,
     static uint64_t now_msec();
 
     friend class MenuNode;
+    friend class PipeRunner;
 };
 
 } // namespace obmenu

@@ -22,6 +22,9 @@ namespace obmenu
 namespace
 {
 MenuSet *g_set = nullptr;
+/* true while parsing pipemenu output (labwc waiting_for_pipe_menu):
+ * id-only references are rejected and created menus are flagged. */
+bool g_parsing_pipe = false;
 
 std::string node_content(xmlNode *node)
 {
@@ -173,6 +176,7 @@ void fill_menu(Menu *parent, xmlNode *node, MenuSet &set)
         }
 
         pipe_menu->execute = execute;
+        pipe_menu->is_pipemenu_child = g_parsing_pipe;
         if (parent)
         {
             add_arrow_item(*parent, *pipe_menu);
@@ -194,6 +198,7 @@ void fill_menu(Menu *parent, xmlNode *node, MenuSet &set)
             return;
         }
 
+        menu->is_pipemenu_child = g_parsing_pipe;
         fill_menu_children(*menu, node, set);
         if (parent)
         {
@@ -206,6 +211,17 @@ void fill_menu(Menu *parent, xmlNode *node, MenuSet &set)
     /* Role (c): id-only → reference to an existing menu. The two dynamic
      * ids get an empty definition on first reference; their items are
      * rebuilt from the live view list whenever a tree opens. */
+    if (g_parsing_pipe)
+    {
+        /* labwc: "This is only supported in static menus. Pipemenus need
+         * to use nested (inline) menu definitions, otherwise we could have
+         * a pipemenu opening the root-menu or similar." */
+        fprintf(stderr,
+            "[menu-parse] cannot link to static menu '%s' from pipemenu\n",
+            id.c_str());
+        return;
+    }
+
     Menu *menu = set.find(id);
     if (!menu && is_dynamic_menu(id))
     {
@@ -323,6 +339,30 @@ void parse_menu_buffer(const char *data, size_t len, MenuSet &set)
 
     xmlFreeDoc(doc);
     xmlCleanupParser();
+    g_set = nullptr;
+}
+
+void parse_pipe_menu_buffer(const char *data, size_t len, Menu *target,
+    MenuSet &set)
+{
+    g_parsing_pipe = true;
+    g_set = &set;
+    xmlDoc *doc = xmlReadMemory(data, (int)len, NULL, NULL, 0);
+    if (!doc)
+    {
+        fprintf(stderr, "[menu-parse] pipemenu output: xmlReadMemory failed\n");
+        g_parsing_pipe = false;
+        g_set = nullptr;
+        return;
+    }
+
+    /* labwc parse_buf(parent, buf): the root element's children are
+     * filled into the pipemenu itself (id/label of the root are ignored) */
+    xmlNode *root = xmlDocGetRootElement(doc);
+    fill_menu_children(*target, root, set);
+    xmlFreeDoc(doc);
+    xmlCleanupParser();
+    g_parsing_pipe = false;
     g_set = nullptr;
 }
 

@@ -40,6 +40,8 @@ struct Menu
     int width_min  = 0;
     int width_max  = 0;  /* 0 = no clamp */
     bool is_pipemenu_cached = false; /* children were spawned at least once */
+    bool is_pipemenu_child  = false; /* created while parsing pipemenu output
+                                      * (labwc menu_create: waiting_for_pipe) */
 
     std::vector<std::unique_ptr<MenuItem>> items;
 };
