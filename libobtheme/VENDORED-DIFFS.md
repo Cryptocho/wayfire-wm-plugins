@@ -34,6 +34,9 @@ diffs below.
    `wlr_renderer_is_pixman(server.renderer)` branch removed; the non-pixman
    (GL) branch is unconditional — wayfire always uses the GL renderer.
 
+### include/common/xml.h
+1. Added `extern "C"` guards (header is consumed from C++ by ob-menu).
+
 ### src/img/img.c
 1. Includes: removed `labwc.h`.
 2. `img_destroy()`: `wlr_buffer_drop(&img->data->buffer->base)` →

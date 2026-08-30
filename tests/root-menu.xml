@@ -1,0 +1,40 @@
+<!-- Fixture: reference openbox menu.xml exercising all parse roles. -->
+<openbox_menu>
+<menu id="client-menu">
+  <item label="Minimize">
+    <action name="Iconify" />
+  </item>
+  <item label="Maximize">
+    <action name="ToggleMaximize" />
+  </item>
+  <item label="Close">
+    <action name="Close" />
+  </item>
+</menu>
+
+<menu id="root-menu" label="">
+  <item label="Terminal">
+    <action name="Execute" command="kitty" />
+  </item>
+  <separator />
+  <menu id="client-list-combined-menu" label="Windows" />
+  <menu id="apps" label="Apps">
+    <item label="File_manager">
+      <action name="Execute" command="thunar" />
+    </item>
+    <menu id="apps-more" label="More">
+      <item label="Editor">
+        <action name="Execute" command="zedit" />
+      </item>
+    </menu>
+  </menu>
+  <item label="Pipe_demo">
+    <action name="Reconfigure" />
+  </item>
+  <menu id="pipe-demo" label="Pipe" execute="cat /tmp/obmenu-pipe.xml" />
+  <separator label="Session" />
+  <item label="Exit">
+    <action name="Exit" />
+  </item>
+</menu>
+</openbox_menu>

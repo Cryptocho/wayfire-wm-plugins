@@ -16,6 +16,7 @@ dep_png = dependency('libpng')
 dep_glib = dependency('glib-2.0')
 dep_wayland_server = dependency('wayland-server')  # wayland-util.h (wl_array)
 dep_libdrm = dependency('libdrm')                  # drm_fourcc.h
+dep_libxml = dependency('libxml-2.0')              # ob-menu menu.xml parsing
 
 subdir('libobtheme')
 libobtheme_dep = declare_dependency(
@@ -35,4 +36,11 @@ executable('include-check', 'tools/include-check.cpp',
 # T2: theme parsing dump/assert CLI.
 executable('obtheme-dump', 'tools/obtheme-dump.c',
   dependencies: [libobtheme_dep],
+)
+
+# M1: menu.xml parse dump/assert CLI.
+executable('obmenu-dump', ['tools/obmenu-dump.cpp', 'ob-menu/menu-parse.cpp'],
+  include_directories: include_directories('ob-menu', 'libobtheme', 'libobtheme/include'),
+  link_with: libobtheme,
+  dependencies: [dep_glib, dep_libxml],
 )

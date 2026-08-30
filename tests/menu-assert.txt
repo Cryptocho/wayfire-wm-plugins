@@ -1,0 +1,43 @@
+# Assertions for tests/root-menu.xml (parse fidelity).
+
+menus_total = 7
+
+# client-menu: first defined, plain items
+menu.client-menu.exists = true
+menu.client-menu.items = 3
+menu.client-menu.item.0.text = Minimize
+menu.client-menu.item.0.actions = Iconify
+menu.client-menu.item.1.actions = ToggleMaximize
+menu.client-menu.item.2.actions = Close
+
+# root-menu: item, separator, submenu refs, pipemenu def, titled separator
+menu.root-menu.exists = true
+menu.root-menu.items = 8
+menu.root-menu.item.0.text = Terminal
+menu.root-menu.item.0.actions = Execute
+menu.root-menu.item.0.command = kitty
+menu.root-menu.item.1.type = separator
+menu.root-menu.item.2.submenu = client-list-combined-menu
+menu.root-menu.item.3.submenu = apps
+menu.root-menu.item.4.text = Pipe_demo
+menu.root-menu.item.4.actions = Reconfigure
+menu.root-menu.item.5.submenu = pipe-demo
+menu.root-menu.item.5.text = Pipe
+menu.root-menu.item.6.type = separator
+menu.root-menu.item.6.text = Session
+menu.root-menu.item.7.actions = Exit
+
+# apps: inline submenu with accelerator + nested submenu ref
+menu.apps.exists = true
+menu.apps.items = 2
+menu.apps.item.0.text = File_manager
+menu.apps.item.0.command = thunar
+menu.apps.item.1.submenu = apps-more
+menu.apps-more.exists = true
+menu.apps-more.item.0.text = Editor
+
+# pipemenu definition captured (spawn happens at open time, M6)
+menu.pipe-demo.exists = true
+
+# client-list-combined-menu: placeholder exists (regenerated at open)
+menu.client-list-combined-menu.exists = true

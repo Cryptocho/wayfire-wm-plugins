@@ -13,6 +13,7 @@ libobtheme_sources = files(
   'src/common/mem.c',
   'src/common/parse-bool.c',
   'src/common/string-helpers.c',
+  'src/common/xml.c',
   'src/img/img.c',
   'src/img/img-png.c',
   'src/img/img-xbm.c',
@@ -30,7 +31,7 @@ libobtheme_includes = include_directories(
 libobtheme = static_library('obtheme',
   libobtheme_sources,
   include_directories: libobtheme_includes,
-  dependencies: [dep_cairo, dep_pangocairo, dep_png, dep_glib,
+  dependencies: [dep_cairo, dep_pangocairo, dep_png, dep_glib, dep_libxml,
     dep_wayland_server, dep_libdrm],
   # vendored img-xbm.c uses GNU case ranges
   override_options: ['c_std=gnu11'],
