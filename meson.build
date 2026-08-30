@@ -25,6 +25,7 @@ libobtheme_dep = declare_dependency(
 )
 
 subdir('proto-pan')
+subdir('ob-decor')
 
 # T1 linkage check: obtheme.h consumable from C++.
 executable('include-check', 'tools/include-check.cpp',

@@ -5,6 +5,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PLUG="${1:-proto-pan}"
+CONFIG="${2:-wayfire.ini}"
 : "${XDG_RUNTIME_DIR:?"run from a user session (XDG_RUNTIME_DIR required)"}"
 [ -f "$ROOT/build/$PLUG/lib$PLUG.so" ] || { echo "SMOKE FAIL: $ROOT/build/$PLUG/lib$PLUG.so missing (run ninja first)"; exit 1; }
 
@@ -16,7 +17,7 @@ trap cleanup EXIT
 WAYFIRE_PLUGIN_PATH="$ROOT/build/$PLUG" \
 WAYFIRE_PLUGIN_XML_PATH="$ROOT/metadata" \
 WLR_BACKENDS=headless \
-wayfire -c "$ROOT/test/wayfire.ini" -d >"$LOG" 2>&1 &
+wayfire -c "$ROOT/test/$CONFIG" -d >"$LOG" 2>&1 &
 WPID=$!
 
 for _ in $(seq 1 100); do

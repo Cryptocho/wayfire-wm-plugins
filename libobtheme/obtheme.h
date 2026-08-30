@@ -12,6 +12,10 @@
 #include "buffer.h"
 #include "theme.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ob_theme_config {
 	/* Theme name searched in $XDG_DATA_HOME/themes, ~/.themes and
 	 * $XDG_DATA_DIRS/themes as <name>/labwc/themerc then
@@ -132,5 +136,9 @@ static inline cairo_surface_t *ob_theme_titlebar_fill(const struct theme *t,
 cairo_surface_t *ob_theme_render_button(struct theme *theme,
 	enum lab_node_type type, unsigned state_bits, int active,
 	int width, int height, double scale);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* OBTHEME_H */

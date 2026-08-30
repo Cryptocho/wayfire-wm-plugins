@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="ob-decor">
+		<_short>Openbox Decor</_short>
+		<_long>Server-side window decorations themed by openbox themerc (via libobtheme), plus an outer ring border.</_long>
+		<category>Window Management</category>
+		<option name="theme" type="string">
+			<_short>Theme</_short>
+			<_long>Openbox theme name (searched in ~/.themes etc., openbox-3/themerc). Empty = labwc built-in defaults.</_long>
+			<default>OB-Arc-Dark</default>
+		</option>
+		<option name="font" type="string">
+			<_short>Title font</_short>
+			<_long>Pango font description for the titlebar text (themerc carries no window fonts, same as labwc).</_long>
+			<default>sans 10</default>
+		</option>
+		<option name="titlebar_layout" type="string">
+			<_short>Titlebar button layout</_short>
+			<_long>labwc syntax: optional "left:right" split on a single colon, buttons comma-separated (icon|menu|iconify|max|close|shade|desk).</_long>
+			<default>menu:iconify,max,close</default>
+		</option>
+		<option name="ring_width" type="int">
+			<_short>Ring width</_short>
+			<_long>Width of the extra decorative ring drawn outside the theme border.</_long>
+			<default>2</default>
+		</option>
+		<option name="ring_active_color" type="color">
+			<_short>Ring color (active)</_short>
+			<default>#b4a1dbff</default>
+		</option>
+		<option name="ring_inactive_color" type="color">
+			<_short>Ring color (inactive)</_short>
+			<default>#2a323bff</default>
+		</option>
+		<option name="ignore_views" type="string">
+			<_short>Ignore views</_short>
+			<_long>Views matching this criteria will not be decorated.</_long>
+			<default>none</default>
+		</option>
+		<option name="forced_views" type="string">
+			<_short>Force decorations</_short>
+			<_long>Force decorations on the views matching this criteria.</_long>
+			<default>none</default>
+		</option>
+	</plugin>
+</wayfire>
