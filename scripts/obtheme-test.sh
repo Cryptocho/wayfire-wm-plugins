@@ -28,5 +28,11 @@ if ! "$DUMP" >/tmp/obtheme-defaults.log 2>&1; then
 fi
 grep -E "border_width|button_width|justify" /tmp/obtheme-defaults.log
 
+echo "=== gradient fixture (XDG_DATA_HOME override) ==="
+XDG_DATA_HOME="$ROOT/test" "$DUMP" --theme gradtest \
+    --assert-file "$ROOT/tests/grad-assert.txt" \
+    >/tmp/obtheme-grad.log 2>&1 || STATUS=1
+grep -E "title_bg_active|assert ok line" /tmp/obtheme-grad.log | tail -3
+
 [ $STATUS -eq 0 ] && echo "obtheme-test OK" || echo "obtheme-test FAIL"
 exit $STATUS

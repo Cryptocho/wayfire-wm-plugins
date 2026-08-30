@@ -3,6 +3,7 @@
 #include <wayfire/scene-render.hpp>
 #include <wayfire/config/types.hpp>
 #include "deco-button.hpp"
+#include <map>
 #include <obtheme.h>
 
 namespace wf
@@ -29,10 +30,6 @@ class decoration_theme_t
     /** @return Ring color for the given activation state */
     wf::color_t get_ring_color(bool active) const;
 
-    /** Set the flags for buttons */
-    void set_buttons(button_type_t flags);
-    button_type_t button_flags;
-
     /**
      * Draw the themed frame (titlebar strip + border strips) inside @frame,
      * i.e. the window rectangle excluding the outer ring.
@@ -51,17 +48,18 @@ class decoration_theme_t
     cairo_surface_t *render_text(std::string text, int width, int height,
         bool active) const;
 
-    struct button_state_t
-    {
-        double width;
-        double height;
-        double border;
-        double hover_progress;
-    };
+    /** Parsed titlebar buttons for side (0 = left, 1 = right); @returns count */
+    int get_title_buttons(int side, enum lab_node_type *out, int max) const;
+    /** Theme-configured button geometry (window.button.* keys) */
+    void get_button_size(int *width, int *height, int *spacing) const;
 
-    /* T4 will replace this with theme-image buttons. */
-    cairo_surface_t *get_button_surface(button_type_t button,
-        const button_state_t& state) const;
+    /**
+     * Cached GL texture of the theme image for the given button
+     * (state bits: OB_BTN_*). Size follows window.button.*.
+     * Missing variants fall back like labwc; may be an empty texture.
+     */
+    wf::texture_t get_button_texture(enum lab_node_type type,
+        unsigned bits, int active) const;
 
   private:
     struct theme *ob = nullptr;
@@ -76,6 +74,9 @@ class decoration_theme_t
     void ensure_fill_texture(int active) const;
     mutable wf::owned_texture_t fill_tex[2];
     mutable cairo_surface_t *fill_src[2] = {nullptr, nullptr};
+
+    /* Button texture cache; key = (lab_type << 8) | (bits << 1) | active. */
+    mutable std::map<int, wf::owned_texture_t> button_tex_cache;
 };
 }
 }

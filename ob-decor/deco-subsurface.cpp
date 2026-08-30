@@ -85,15 +85,6 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
     {
         this->_view = view->weak_from_this();
         view->connect(&title_set);
-        if (view->parent)
-        {
-            theme.set_buttons(wf::odecor::button_type_t(wf::odecor::BUTTON_TOGGLE_MAXIMIZE |
-                wf::odecor::BUTTON_CLOSE));
-        } else
-        {
-            theme.set_buttons(wf::odecor::button_type_t(wf::odecor::BUTTON_MINIMIZE |
-                wf::odecor::BUTTON_TOGGLE_MAXIMIZE | wf::odecor::BUTTON_CLOSE));
-        }
 
         // make sure to hide frame if the view is fullscreen
         update_decoration_size();
@@ -142,7 +133,8 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
                 }
             } else // button
             {
-                item->as_button().render(data, item->get_geometry() + origin);
+                item->as_button().render(data, item->get_geometry() + origin,
+                    activated);
             }
         }
     }

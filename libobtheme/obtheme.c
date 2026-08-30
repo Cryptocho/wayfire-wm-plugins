@@ -184,6 +184,27 @@ void ob_theme_finish(struct theme *theme)
 	free(theme);
 }
 
+int ob_theme_title_buttons(const struct theme *t, int side,
+	enum lab_node_type *out, int max)
+{
+	(void)t; /* buttons live in the rc shim, populated at ob_theme_init */
+	const enum lab_node_type *src = side == 0 ? rc.title_buttons_left :
+		rc.title_buttons_right;
+	int nr = side == 0 ? rc.nr_title_buttons_left :
+		rc.nr_title_buttons_right;
+	if (nr > max)
+	{
+		nr = max;
+	}
+
+	for (int i = 0; i < nr; i++)
+	{
+		out[i] = src[i];
+	}
+
+	return nr;
+}
+
 cairo_surface_t *ob_theme_render_button(struct theme *theme,
 	enum lab_node_type type, unsigned state_bits, int active,
 	int width, int height, double scale)

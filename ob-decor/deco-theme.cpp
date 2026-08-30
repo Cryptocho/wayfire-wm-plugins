@@ -1,7 +1,9 @@
 #include "deco-theme.hpp"
 #include <wayfire/opengl.hpp>
+#include <wayfire/debug.hpp>
 #include <pango/pangocairo.h>
 #include <algorithm>
+#include <map>
 
 namespace wf
 {
@@ -42,11 +44,6 @@ int decoration_theme_t::get_ring_width() const
 wf::color_t decoration_theme_t::get_ring_color(bool active) const
 {
     return active ? ring_active_color.value() : ring_inactive_color.value();
-}
-
-void decoration_theme_t::set_buttons(button_type_t flags)
-{
-    button_flags = flags;
 }
 
 void decoration_theme_t::ensure_fill_texture(int active) const
@@ -131,6 +128,45 @@ void decoration_theme_t::render_ring(
     data.pass->add_rect(rc, data.target, right, data.damage);
 }
 
+int decoration_theme_t::get_title_buttons(int side, enum lab_node_type *out,
+    int max) const
+{
+    return ob_theme_title_buttons(ob, side, out, max);
+}
+
+void decoration_theme_t::get_button_size(int *width, int *height,
+    int *spacing) const
+{
+    ob_theme_button_size(ob, width, height, spacing);
+}
+
+wf::texture_t decoration_theme_t::get_button_texture(
+    enum lab_node_type type, unsigned bits, int active) const
+{
+    static wf::texture_t empty;
+    LOGE("btn-tex enter type=", (int)type, " bits=", bits);
+    int bw, bh, bs;
+    get_button_size(&bw, &bh, &bs);
+    LOGE("btn-tex size=", bw, "x", bh);
+    const int key = ((int)type << 8) | ((int)(bits & 3) << 1) | (active & 1);
+    auto it = button_tex_cache.find(key);
+    if (it == button_tex_cache.end())
+    {
+        auto *surf = ob_theme_render_button(ob, type, bits, active, bw, bh,
+            1.0);
+        LOGE("btn-tex surf=", (void*)surf);
+        if (!surf)
+        {
+            return empty;
+        }
+
+        it = button_tex_cache.emplace(key, wf::owned_texture_t{surf}).first;
+        cairo_surface_destroy(surf);
+    }
+
+    return it->second.get_texture();
+}
+
 cairo_surface_t *decoration_theme_t::render_text(std::string text,
     int width, int height, bool active) const
 {
@@ -178,105 +214,5 @@ cairo_surface_t *decoration_theme_t::render_text(std::string text,
     return surface;
 }
 
-/* T4 will replace this with theme-image buttons; until then the old
- * wayfire-style glyphs are kept (unused while button layout is empty). */
-cairo_surface_t *decoration_theme_t::get_button_surface(button_type_t button,
-    const button_state_t& state) const
-{
-    cairo_surface_t *button_surface = cairo_image_surface_create(
-        CAIRO_FORMAT_ARGB32, state.width, state.height);
-
-    auto cr = cairo_create(button_surface);
-    cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
-
-    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
-    cairo_set_source_rgba(cr, 0, 0, 0, 0);
-    cairo_rectangle(cr, 0, 0, state.width, state.height);
-    cairo_fill(cr);
-
-    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-
-    color_t base = {0.60, 0.60, 0.63, 0.36};
-    double line  = 0.27;
-    double hover = 0.27;
-
-    if (fabs(state.hover_progress) > 1e-3)
-    {
-        switch (button)
-        {
-          case BUTTON_CLOSE:
-            base = {242.0 / 255.0, 80.0 / 255.0, 86.0 / 255.0, 0.63};
-            break;
-
-          case BUTTON_TOGGLE_MAXIMIZE:
-            base = {57.0 / 255.0, 234.0 / 255.0, 73.0 / 255.0, 0.63};
-            break;
-
-          case BUTTON_MINIMIZE:
-            base = {250.0 / 255.0, 198.0 / 255.0, 54.0 / 255.0, 0.63};
-            break;
-
-          default:
-            assert(false);
-        }
-
-        line *= 2.0;
-    }
-
-    cairo_set_source_rgba(cr,
-        base.r + 0.0 * state.hover_progress,
-        base.g + 0.0 * state.hover_progress,
-        base.b + 0.0 * state.hover_progress,
-        base.a + hover * state.hover_progress);
-    cairo_arc(cr, state.width / 2, state.height / 2,
-        state.width / 2, 0, 2 * M_PI);
-    cairo_fill(cr);
-
-    cairo_set_line_width(cr, state.border);
-    cairo_set_source_rgba(cr, 0.00, 0.00, 0.00, line);
-    double r = state.width / 2 - 0.5 * state.border;
-    cairo_arc(cr, state.width / 2, state.height / 2, r, 0, 2 * M_PI);
-    cairo_stroke(cr);
-
-    cairo_set_source_rgba(cr, 0.00, 0.00, 0.00, line / 2);
-    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
-    switch (button)
-    {
-      case BUTTON_CLOSE:
-        cairo_set_line_width(cr, 1.5 * state.border);
-        cairo_move_to(cr, 1.0 * state.width / 4.0,
-            1.0 * state.height / 4.0);
-        cairo_line_to(cr, 3.0 * state.width / 4.0,
-            3.0 * state.height / 4.0);
-        cairo_move_to(cr, 3.0 * state.width / 4.0,
-            1.0 * state.height / 4.0);
-        cairo_line_to(cr, 1.0 * state.width / 4.0,
-            3.0 * state.height / 4.0);
-        cairo_stroke(cr);
-        break;
-
-      case BUTTON_TOGGLE_MAXIMIZE:
-        cairo_set_line_width(cr, 1.5 * state.border);
-        cairo_rectangle(cr, state.width / 4.0, state.height / 4.0,
-            state.width / 2.0, state.height / 2.0);
-        cairo_stroke(cr);
-        break;
-
-      case BUTTON_MINIMIZE:
-        cairo_set_line_width(cr, 1.75 * state.border);
-        cairo_move_to(cr, 1.0 * state.width / 4.0, state.height / 2.0);
-        cairo_line_to(cr, 3.0 * state.width / 4.0, state.height / 2.0);
-        cairo_stroke(cr);
-        break;
-
-      default:
-        assert(false);
-    }
-
-    cairo_fill(cr);
-    cairo_destroy(cr);
-
-    return button_surface;
-}
 }
 }

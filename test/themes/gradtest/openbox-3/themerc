@@ -1,0 +1,9 @@
+# Minimal gradient theme for T5 assertions
+border.width: 3
+window.active.border.color: #111111
+window.active.title.bg: Gradient Vertical
+window.active.title.bg.color: #202020
+window.active.title.bg.colorTo: #404040
+window.active.label.text.color: #eeeeee
+window.label.text.justify: right
+window.active.button.unpressed.image.color: #abcdef

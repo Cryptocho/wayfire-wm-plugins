@@ -120,6 +120,11 @@ static inline cairo_surface_t *ob_theme_titlebar_fill(const struct theme *t,
 		t->window[active].titlebar_fill->surface : NULL;
 }
 
+/* Copy the parsed titlebar buttons (from titlebar_layout) for the given
+ * side (0 = left, 1 = right). Returns the count (<= max). */
+int ob_theme_title_buttons(const struct theme *t, int side,
+	enum lab_node_type *out, int max);
+
 /* ---- button rendering ---- */
 
 /* State bits (subset of labwc's LAB_BS_*; see include/theme.h). */

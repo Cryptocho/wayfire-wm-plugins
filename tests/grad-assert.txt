@@ -1,0 +1,6 @@
+border_width = 3
+title_bg_active = vertical
+label_color_active = #eeeeee
+justify = right
+button_color_close_unpressed = #abcdef
+button_render_close = ok

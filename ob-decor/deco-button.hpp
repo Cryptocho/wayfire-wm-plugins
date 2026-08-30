@@ -4,25 +4,17 @@
 #include <wayfire/util.hpp>
 #include <wayfire/opengl.hpp>
 #include <wayfire/render-manager.hpp>
-#include <wayfire/util/duration.hpp>
 #include <wayfire/plugins/common/cairo-util.hpp>
 
 #include <cairo.h>
-#include <pango/pango.h>
-#include <pango/pangocairo.h>
+
+#include <obtheme.h>
 
 namespace wf
 {
 namespace odecor
 {
 class decoration_theme_t;
-
-enum button_type_t
-{
-    BUTTON_CLOSE           = 1 << 0,
-    BUTTON_TOGGLE_MAXIMIZE = 1 << 1,
-    BUTTON_MINIMIZE        = 1 << 2,
-};
 
 class button_t
 {
@@ -31,70 +23,45 @@ class button_t
      * Create a new button with the given theme.
      * @param theme  The theme to use.
      * @param damage_callback   A callback to execute when the button needs a
-     * repaint. Damage won't be reported while render() is being called.
+     * repaint.
      */
     button_t(const decoration_theme_t& theme,
         std::function<void()> damage_callback);
 
-    ~button_t();
-    button_t(const button_t &) = delete;
-    button_t(button_t &&) = delete;
-    button_t& operator =(const button_t&) = delete;
-    button_t& operator =(button_t&&) = delete;
+    /** The labwc button identity (drives the rendered image). */
+    void set_lab_type(enum lab_node_type type);
+    enum lab_node_type get_lab_type() const;
 
-    /**
-     * Set the type of the button. This will affect the displayed icon and
-     * potentially other appearance like colors.
-     */
-    void set_button_type(button_type_t type);
+    /** Action id from decoration_layout_action_t; 0 = inert button. */
+    void set_action(int action);
+    int get_action() const;
 
-    /** @return The type of the button */
-    button_type_t get_button_type() const;
-
-    /**
-     * Set the button hover state.
-     * Affects appearance.
-     */
+    /** Hover/press state; affects which theme image variant is used. */
     void set_hover(bool is_hovered);
-
-    /**
-     * Set whether the button is pressed or not.
-     * Affects appearance.
-     */
     void set_pressed(bool is_pressed);
 
     /**
      * Render the button on the given framebuffer at the given coordinates.
-     * Precondition: set_button_type() has been called, otherwise result is no-op
      *
      * @param data The render data
      * @param geometry The geometry of the button, in logical coordinates
+     * @param active Whether the owning view is activated
      */
-    void render(const scene::render_instruction_t& data, wf::geometry_t geometry);
+    void render(const scene::render_instruction_t& data,
+        wf::geometry_t geometry, bool active);
 
   private:
     const decoration_theme_t& theme;
 
-    /* Whether the button needs repaint */
-    button_type_t type;
-    wf::owned_texture_t button_texture;
-
-    /* Whether the button is currently being hovered */
+    enum lab_node_type lab_type = LAB_NODE_BUTTON_CLOSE;
+    int action_id = 0;
     bool is_hovered = false;
-    /* Whether the button is currently being held */
     bool is_pressed = false;
-    /* The shade of button background to use. */
-    wf::animation::simple_animation_t hover{wf::create_option(100)};
 
     std::function<void()> damage_callback;
     wf::wl_idle_call idle_damage;
     /** Damage button the next time the main loop goes idle */
     void add_idle_damage();
-
-    /**
-     * Redraw the button surface and store it as a texture
-     */
-    void update_texture();
 };
 }
 }

@@ -76,19 +76,73 @@ decoration_layout_t::decoration_layout_t(const decoration_theme_t& th,
 void decoration_layout_t::resize(int width, int height)
 {
     this->layout_areas.clear();
-    if (this->titlebar_size > 0)
+    if (this->titlebar_size <= 0)
     {
-        /* T4 will create theme-image buttons from ob-decor/titlebar_layout
-         * here; for now the whole titlebar is a single move/title area. */
-        wf::geometry_t title_geometry = {
-            ring + border_size,
-            ring + border_size,
-            width - 2 * (ring + border_size),
-            titlebar_size,
-        };
-        this->layout_areas.push_back(std::make_unique<decoration_area_t>(
-            DECORATION_AREA_TITLE, title_geometry));
+        return;
     }
+
+    int bw, bh, bsp;
+    theme.get_button_size(&bw, &bh, &bsp);
+    const int per     = bw + bsp;
+    const int btn_y   = ring + border_size + (titlebar_size - bh) / 2;
+    const int frame_x = ring + border_size;
+
+    auto action_for = [] (enum lab_node_type t)
+    {
+        switch (t)
+        {
+          case LAB_NODE_BUTTON_CLOSE:
+            return (int)DECORATION_ACTION_CLOSE;
+          case LAB_NODE_BUTTON_MAXIMIZE:
+            return (int)DECORATION_ACTION_TOGGLE_MAXIMIZE;
+          case LAB_NODE_BUTTON_ICONIFY:
+            return (int)DECORATION_ACTION_MINIMIZE;
+          default:
+            return 0; /* menu/shade/desk: drawn but inert until P2+ */
+        }
+    };
+
+    auto add_button = [&] (enum lab_node_type type, int x)
+    {
+        wf::geometry_t g{x, btn_y, (uint32_t)bw, (uint32_t)bh};
+        this->layout_areas.push_back(std::make_unique<decoration_area_t>(
+            g, damage_callback, theme));
+        this->layout_areas.back()->as_button().set_lab_type(type);
+        this->layout_areas.back()->as_button().set_action(action_for(type));
+    };
+
+    enum lab_node_type btns[8];
+    int content_left  = frame_x;
+    int content_right = width - frame_x;
+
+    /* Left side, left-to-right */
+    int nr = theme.get_title_buttons(0, btns, 8);
+    for (int i = 0; i < nr; i++)
+    {
+        add_button(btns[i], content_left);
+        content_left += per;
+    }
+
+    /* Right side, right-to-left (last listed button ends at the edge) */
+    nr = theme.get_title_buttons(1, btns, 8);
+    int x = width - frame_x - bw;
+    for (int i = nr - 1; i >= 0; i--)
+    {
+        add_button(btns[i], x);
+        x -= per;
+    }
+
+    content_right = x + per - bsp;
+
+    /* Titlebar dragging area between the button strips */
+    wf::geometry_t title_geometry = {
+        content_left,
+        ring + border_size,
+        std::max(0, content_right - content_left),
+        titlebar_size,
+    };
+    this->layout_areas.push_back(std::make_unique<decoration_area_t>(
+        DECORATION_AREA_TITLE, title_geometry));
 
     /* Resizing edges (ring + theme border act as resize handles, like
      * labwc's invisible extents) */
@@ -235,19 +289,10 @@ decoration_layout_t::action_response_t decoration_layout_t::handle_press_event(
             begin_area->as_button().set_pressed(false);
             if (end_area && (begin_area == end_area))
             {
-                switch (begin_area->as_button().get_button_type())
+                const int action = begin_area->as_button().get_action();
+                if (action != DECORATION_ACTION_NONE)
                 {
-                  case BUTTON_CLOSE:
-                    return {DECORATION_ACTION_CLOSE, 0};
-
-                  case BUTTON_TOGGLE_MAXIMIZE:
-                    return {DECORATION_ACTION_TOGGLE_MAXIMIZE, 0};
-
-                  case BUTTON_MINIMIZE:
-                    return {DECORATION_ACTION_MINIMIZE, 0};
-
-                  default:
-                    break;
+                    return {static_cast<decoration_layout_action_t>(action), 0};
                 }
             }
         }
