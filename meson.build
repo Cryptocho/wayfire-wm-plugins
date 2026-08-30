@@ -44,3 +44,6 @@ executable('obmenu-dump', ['tools/obmenu-dump.cpp', 'ob-menu/menu-parse.cpp'],
   link_with: libobtheme,
   dependencies: [dep_glib, dep_libxml],
 )
+
+# M3: ob-menu plugin.
+subdir('ob-menu')
