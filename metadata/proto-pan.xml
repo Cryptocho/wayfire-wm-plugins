@@ -4,5 +4,15 @@
 		<_short>Proto Pan</_short>
 		<_long>P0 prototype: scrolling-layout free-pan mechanism (sublayer + offset).</_long>
 		<category>Window Management</category>
+		<option name="key_left" type="key">
+			<_short>Pan left one screen</_short>
+			<_long>Steps the pan rail one screen to the left.</_long>
+			<default>&lt;super&gt; KEY_F1</default>
+		</option>
+		<option name="key_right" type="key">
+			<_short>Pan right one screen</_short>
+			<_long>Steps the pan rail one screen to the right.</_long>
+			<default>&lt;super&gt; KEY_F2</default>
+		</option>
 	</plugin>
 </wayfire>
