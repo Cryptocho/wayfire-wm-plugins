@@ -79,6 +79,8 @@ enum decoration_layout_action_t
     DECORATION_ACTION_CLOSE           = 3,
     DECORATION_ACTION_TOGGLE_MAXIMIZE = 4,
     DECORATION_ACTION_MINIMIZE        = 5,
+    /* ob-menu integration (M5): open the client-menu */
+    DECORATION_ACTION_MENU            = 6,
 };
 
 class decoration_theme_t;
@@ -136,6 +138,18 @@ class decoration_layout_t
      * Handle focus lost event.
      */
     void handle_focus_lost();
+
+    /**
+     * @return true when the decoration-local point is over the titlebar
+     * (move area, not a button) — used for the right-click client menu.
+     */
+    bool point_in_titlebar(int x, int y);
+
+    /**
+     * @return true when the last tracked pointer position is over the
+     * titlebar (move area, not a button).
+     */
+    bool pointer_in_titlebar();
 
   private:
     const int titlebar_size;

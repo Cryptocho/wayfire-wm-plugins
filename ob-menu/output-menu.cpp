@@ -2,6 +2,8 @@
 /* output-menu — per-output menu runtime (M3: single-level root menu; M4
  * adds the submenu stack + keyboard; M5 actions; M6 pipemenus). */
 #include "output-menu.hpp"
+#include "menu-actions.hpp"
+#include "menu-dynamic.hpp"
 
 #include <wayfire/scene-operations.hpp>
 #include <wayfire/debug.hpp>
@@ -234,6 +236,8 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
 void OutputMenu::open_root(const std::string &id, wf::pointf_t anchor)
 {
     auto &state = MenuState::get();
+    /* rebuild dynamic entries before any Menu* escapes into the stack */
+    refresh_dynamic_menus(state.set, output);
     Menu *menu  = state.set.find(id);
     if (!menu)
     {
@@ -400,23 +404,9 @@ void OutputMenu::handle_pointer_motion_impl(wf::pointf_t global)
 
 void OutputMenu::run_actions(MenuItem *item)
 {
-    /* M3: Execute only; full action table lands in M5. */
-    for (auto &action : item->actions)
-    {
-        if (action.name == "Execute")
-        {
-            auto cmd = action.attrs["command"];
-            if (!cmd.empty())
-            {
-                wf::get_core().run(cmd);
-            }
-        }
-        else
-        {
-            LOGE("ob-menu: action '", action.name,
-                "' not wired yet (M5)");
-        }
-    }
+    /* whitelist lives in menu-actions.cpp; menu is already closed by
+     * every caller, so focus returns to the view first */
+    run_menu_actions(output, item, focused_view);
 }
 
 void OutputMenu::handle_pointer_button(const wlr_pointer_button_event& ev,
@@ -640,6 +630,18 @@ void OutputMenu::open_client_menu(wayfire_toplevel_view view)
     focused_view = view;
     auto g = view->get_geometry();
     open_root("client-menu", wf::pointf_t{(double)g.x + 24, (double)g.y + 8});
+}
+
+void OutputMenu::open_client_menu(wayfire_toplevel_view view,
+    wf::pointf_t anchor)
+{
+    if (!view)
+    {
+        return;
+    }
+
+    focused_view = view;
+    open_root("client-menu", anchor);
 }
 
 void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)

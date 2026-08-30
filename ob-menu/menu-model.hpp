@@ -70,6 +70,16 @@ struct MenuSet
     }
 };
 
+/* labwc's predefined dynamic menus: empty definitions whose items are
+ * rebuilt from the live view list each time a menu tree opens. */
+static constexpr const char *DYN_MENU_CLIENT_LIST  = "client-list-combined-menu";
+static constexpr const char *DYN_MENU_CLIENT_SEND_TO = "client-send-to-menu";
+
+inline bool is_dynamic_menu(const std::string &id)
+{
+    return (id == DYN_MENU_CLIENT_LIST) || (id == DYN_MENU_CLIENT_SEND_TO);
+}
+
 /* Build the built-in default menus (labwc init_rootmenu/init_windowmenu
  * equivalents) when no menu.xml provides them. */
 void add_default_menus(MenuSet &set);

@@ -21,6 +21,7 @@
 #include "deco-subsurface.hpp"
 #include "deco-layout.hpp"
 #include "deco-theme.hpp"
+#include "ob-menu-events.hpp"
 #include <wayfire/window-manager.hpp>
 
 #include <wayfire/plugins/common/cairo-util.hpp>
@@ -237,6 +238,18 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
 
     void handle_pointer_button(const wlr_pointer_button_event& ev) override
     {
+        if (ev.button == BTN_RIGHT)
+        {
+            /* labwc: right-click on the titlebar opens the client-menu */
+            if ((ev.state == WL_POINTER_BUTTON_STATE_PRESSED) &&
+                layout.pointer_in_titlebar())
+            {
+                request_client_menu();
+            }
+
+            return;
+        }
+
         if (ev.button != BTN_LEFT)
         {
             return;
@@ -275,9 +288,26 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
                 return wf::get_core().default_wm->minimize_request(view, true);
                 break;
 
+              case wf::odecor::DECORATION_ACTION_MENU:
+                return request_client_menu();
+
               default:
                 break;
             }
+        }
+    }
+
+    /** Fire ob_menu_request_signal ("client-menu") on the view's output. */
+    void request_client_menu()
+    {
+        if (auto view = _view.lock())
+        {
+            auto output = view->get_output();
+            obmenu::ob_menu_request_signal req;
+            req.menu_id     = "client-menu";
+            req.client_view = view;
+            req.anchor      = output->get_cursor_position();
+            output->emit(&req);
         }
     }
 

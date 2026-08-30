@@ -203,8 +203,15 @@ void fill_menu(Menu *parent, xmlNode *node, MenuSet &set)
         return;
     }
 
-    /* Role (c): id-only → reference to an existing menu. */
+    /* Role (c): id-only → reference to an existing menu. The two dynamic
+     * ids get an empty definition on first reference; their items are
+     * rebuilt from the live view list whenever a tree opens. */
     Menu *menu = set.find(id);
+    if (!menu && is_dynamic_menu(id))
+    {
+        menu = set.create(id, label);
+    }
+
     if (!menu)
     {
         fprintf(stderr, "[menu-parse] reference to unknown menu '%s'\n", id.c_str());

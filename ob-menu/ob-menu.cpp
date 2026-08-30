@@ -2,6 +2,7 @@
 /* ob-menu — openbox menu.xml menu system (core-level plugin; per-output
  * runtime lives in output-menu.cpp). */
 #include "output-menu.hpp"
+#include "ob-menu-events.hpp"
 
 #include <wayfire/plugin.hpp>
 #include <wayfire/per-output-plugin.hpp>
@@ -11,8 +12,10 @@
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/option-wrapper.hpp>
 #include <wayfire/bindings-repository.hpp>
+#include <wayfire/workarea.hpp>
 #include <wayfire/debug.hpp>
 
+#include <algorithm>
 #include <map>
 
 namespace obmenu
@@ -23,6 +26,11 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
     void init() override
     {
         output->add_key(key_root, &on_key_root);
+
+        /* xdg toplevels asking for a window menu (show_window_menu) */
+        output->connect(&on_show_window_menu);
+        /* titlebar right-click / menu button from ob-decor */
+        output->connect(&on_menu_request);
     }
 
     void fini() override
@@ -45,6 +53,13 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
             menu_runtime->close_all();
         }
 
+        /* labwc: the client-send-to menu acts on the focused client */
+        if (id == DYN_MENU_CLIENT_SEND_TO)
+        {
+            menu_runtime->set_focused_view(wf::toplevel_cast(
+                wf::get_core().seat->get_active_view()));
+        }
+
         menu_runtime->open_root(id, anchor);
     }
 
@@ -52,6 +67,22 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
     {
         auto view = wf::toplevel_cast(
             wf::get_core().seat->get_active_view());
+        if (!view)
+        {
+            return;
+        }
+
+        open_client_menu_for(view);
+    }
+
+    OutputMenu *get_runtime()
+    {
+        return menu_runtime.get();
+    }
+
+  private:
+    void open_client_menu_for(wayfire_toplevel_view view)
+    {
         if (!view)
         {
             return;
@@ -70,10 +101,67 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
         menu_runtime->open_client_menu(view);
     }
 
-    OutputMenu *get_runtime()
+    void open_client_menu_at(wayfire_toplevel_view view, wf::pointf_t anchor)
     {
-        return menu_runtime.get();
+        if (!view)
+        {
+            return;
+        }
+
+        /* clamp into the workarea (rough: exact height depends on items) */
+        auto wa = output->workarea->get_workarea();
+        anchor.x = std::clamp(anchor.x, (double)wa.x,
+            (double)(wa.x + wa.width - 32));
+        anchor.y = std::clamp(anchor.y, (double)wa.y,
+            (double)(wa.y + wa.height - 32));
+
+        if (!menu_runtime)
+        {
+            menu_runtime = std::make_unique<OutputMenu>(output);
+        }
+
+        if (menu_runtime->is_open())
+        {
+            menu_runtime->close_all();
+        }
+
+        menu_runtime->open_client_menu(view, anchor);
     }
+
+    /* xdg show_window_menu: surface-relative position → output-local */
+    wf::signal::connection_t<wf::view_show_window_menu_signal>
+    on_show_window_menu = [=] (wf::view_show_window_menu_signal *ev)
+    {
+        auto view = wf::toplevel_cast(ev->view);
+        if (!view || (view->get_output() != output))
+        {
+            return;
+        }
+
+        auto g = view->get_geometry();
+        open_client_menu_at(view, wf::pointf_t{
+            (double)g.x + ev->relative_position.x,
+            (double)g.y + ev->relative_position.y});
+    };
+
+    /* ob-decor titlebar right-click / menu button */
+    wf::signal::connection_t<obmenu::ob_menu_request_signal>
+    on_menu_request = [=] (obmenu::ob_menu_request_signal *ev)
+    {
+        if (!menu_runtime)
+        {
+            menu_runtime = std::make_unique<OutputMenu>(output);
+        }
+
+        if (menu_runtime->is_open())
+        {
+            menu_runtime->close_all();
+        }
+
+        menu_runtime->set_focused_view(
+            wf::toplevel_cast(ev->client_view));
+        menu_runtime->open_root(ev->menu_id, ev->anchor);
+    };
 
   private:
     wf::option_wrapper_t<wf::keybinding_t> key_root{"ob-menu/key_root_menu"};
@@ -153,6 +241,10 @@ class wayfire_ob_menu : public wf::plugin_interface_t
 
                 inst->open_menu_at(data.has_member("menu") ?
                     (std::string)data["menu"] : "root-menu", anchor);
+            }
+            else if ((op == "open-client") && inst)
+            {
+                inst->open_client_at_titlebar();
             }
 
             /* re-take the runtime AFTER open-root may have created it */

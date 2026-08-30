@@ -97,8 +97,10 @@ void decoration_layout_t::resize(int width, int height)
             return (int)DECORATION_ACTION_TOGGLE_MAXIMIZE;
           case LAB_NODE_BUTTON_ICONIFY:
             return (int)DECORATION_ACTION_MINIMIZE;
+          case LAB_NODE_BUTTON_WINDOW_MENU:
+            return (int)DECORATION_ACTION_MENU;
           default:
-            return 0; /* menu/shade/desk: drawn but inert until P2+ */
+            return 0; /* shade/desk buttons stay inert */
         }
     };
 
@@ -204,6 +206,18 @@ void decoration_layout_t::unset_hover(std::optional<wf::point_t> position)
     {
         area->as_button().set_hover(false);
     }
+}
+
+bool decoration_layout_t::point_in_titlebar(int x, int y)
+{
+    auto area = find_area_at(wf::point_t{x, y});
+    return area && (area->get_type() == DECORATION_AREA_TITLE);
+}
+
+bool decoration_layout_t::pointer_in_titlebar()
+{
+    return current_input && point_in_titlebar(current_input->x,
+        current_input->y);
 }
 
 /** Handle motion event to (x, y) relative to the decoration */

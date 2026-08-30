@@ -37,6 +37,9 @@ class OutputMenu : public wf::pointer_interaction_t,
     /** Open the client-menu anchored to the titlebar of @view. */
     void open_client_menu(wayfire_toplevel_view view);
 
+    /** Open the client-menu at an explicit output-local anchor. */
+    void open_client_menu(wayfire_toplevel_view view, wf::pointf_t anchor);
+
     /** Remember the last focused toplevel (for client-menu actions). */
     void set_focused_view(wayfire_toplevel_view view)
     {
