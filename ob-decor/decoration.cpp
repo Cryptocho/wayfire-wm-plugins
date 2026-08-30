@@ -1,4 +1,8 @@
 #include <wayfire/per-output-plugin.hpp>
+#include <wayfire/plugins/ipc/ipc-method-repository.hpp>
+#include <wayfire/window-manager.hpp>
+#include <wayfire/plugins/common/shared-core-data.hpp>
+#include <wayfire/debug.hpp>
 #include <wayfire/debug.hpp>
 #include <wayfire/view.hpp>
 #include <wayfire/workarea.hpp>
@@ -68,9 +72,84 @@ class wayfire_decoration : public wf::plugin_interface_t
     };
 
   public:
+    wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
+
     void init() override
     {
         LOGI("ob-decor init");
+
+        /* TEMP DEBUG (remove before P1 close): exercise the move/resize
+         * executor chain directly and report plugin activation state. */
+        ipc_repo->register_method("ob-decor/debug", [this] (wf::json_t data)
+        {
+            wf::json_t r;
+            std::string op = data.has_member("op") ? (std::string)data["op"] : "";
+
+            wayfire_toplevel_view target;
+            for (auto view : wf::get_core().get_all_views())
+            {
+                if (auto tl = wf::toplevel_cast(view))
+                {
+                    if (is_toplevel_decorated(tl->toplevel()))
+                    {
+                        target = tl;
+                        break;
+                    }
+                }
+            }
+
+            r["found_view"] = target != nullptr;
+            if (op == "move")
+            {
+                LOGE("DEBUG: move_request on ", target ? target->get_title() : "none");
+                wf::get_core().default_wm->move_request(target);
+            }
+            else if (op == "resize")
+            {
+                LOGE("DEBUG: resize_request on ", target ? target->get_title() : "none");
+                wf::get_core().default_wm->resize_request(target,
+                    WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+            }
+            else if ((op == "drag-title") || (op == "drag-edge"))
+            {
+                auto g = target->get_geometry();
+                int th = target->get_output()->wset()->get_workspace_grid_size().width * 0 +
+                    g.height; /* outer height */
+                (void)th;
+                /* Margins are known from the decorator itself. */
+                auto margins = target->get_output()->wset() ? wf::decoration_margins_t{0, 0, 0, 0} :
+                    wf::decoration_margins_t{0, 0, 0, 0};
+                (void)margins;
+                if (op == "drag-title")
+                {
+                    /* middle of titlebar, drag right */
+                    int x0 = 60, y0 = 8, x1 = x0 + 30, y1 = 8;
+                    r["action"] = target->toplevel()->get_data<wf::ob_decorator_t>() ?
+                        target->toplevel()->get_data<wf::ob_decorator_t>()->simulate_drag(
+                            x0, y0, x1, y1) : -99;
+                }
+                else
+                {
+                    /* left border strip, drag right */
+                    int x0 = 1, y0 = 40, x1 = x0 + 20, y1 = 42;
+                    r["action"] = target->toplevel()->get_data<wf::ob_decorator_t>() ?
+                        target->toplevel()->get_data<wf::ob_decorator_t>()->simulate_drag(
+                            x0, y0, x1, y1) : -99;
+                }
+            }
+
+            if (target)
+            {
+                r["move_active"] = target->get_output()->is_plugin_active("move");
+                r["resize_active"] = target->get_output()->is_plugin_active("resize");
+                auto g = target->get_geometry();
+                r["geom_x"] = g.x;
+                r["geom_y"] = g.y ;
+            }
+
+            return r;
+        });
+        /* END TEMP DEBUG */
         wf::get_core().connect(&on_decoration_state_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
         wf::get_core().connect(&on_view_tiled);
@@ -83,6 +162,7 @@ class wayfire_decoration : public wf::plugin_interface_t
 
     void fini() override
     {
+        ipc_repo->unregister_method("ob-decor/debug");
         for (auto view : wf::get_core().get_all_views())
         {
             if (auto toplevel = wf::toplevel_cast(view))

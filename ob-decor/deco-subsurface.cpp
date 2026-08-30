@@ -369,6 +369,33 @@ wf::ob_decorator_t::~ob_decorator_t()
     wf::scene::remove_child(deco);
 }
 
+int wf::ob_decorator_t::simulate_drag(int x0, int y0, int x1, int y1)
+{
+    auto& layout = deco->layout;
+    layout.handle_motion(x0, y0);
+    auto press = layout.handle_press_event(true);
+    if (press.action != wf::odecor::DECORATION_ACTION_NONE)
+    {
+        return press.action; /* immediate action (resize) */
+    }
+
+    for (int i = 1; i <= 10; i++)
+    {
+        int xi = x0 + (x1 - x0) * i / 10;
+        int yi = y0 + (y1 - y0) * i / 10;
+        auto act = layout.handle_motion(xi, yi);
+        if (act.action != wf::odecor::DECORATION_ACTION_NONE)
+        {
+            layout.handle_focus_lost();
+            return act.action;
+        }
+    }
+
+    auto release = layout.handle_press_event(false);
+    layout.handle_focus_lost();
+    return release.action;
+}
+
 wf::decoration_margins_t wf::ob_decorator_t::get_margins(const wf::toplevel_state_t& state)
 {
     if (state.fullscreen)

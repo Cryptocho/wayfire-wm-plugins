@@ -37,7 +37,10 @@ wayfire -c test/wayfire-decor.ini -d
 | 4 | 点击 close | 窗口关闭 |
 | 5 | hover 各按钮 | 图标变亮(hover 色 #B5BCC9 / close #D7787D) |
 
-### D3 resize 边缘
+### D3 resize/move 拖动(前置:会话需在配置含 move/resize 后启动)
+
+> 配置已含 `move resize`(装饰手势的执行者:decor 节点检测手势→发请求信号→
+> move/resize 插件执行)。若你改过配置,请**重启嵌套会话**再测。
 
 | 步骤 | 操作 | 预期 |
 |---|---|---|

@@ -25,6 +25,10 @@ class ob_decorator_t : public wf::custom_data_t
     ob_decorator_t(wayfire_toplevel_view view);
     ~ob_decorator_t();
     wf::decoration_margins_t get_margins(const wf::toplevel_state_t& state);
+
+    /* TEMP DEBUG: synthesize a drag gesture through the layout and return
+     * the action it yields (-1 if none). */
+    int simulate_drag(int x0, int y0, int x1, int y1);
 };
 }
 
