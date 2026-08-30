@@ -74,33 +74,27 @@ void decoration_theme_t::render_background(
     const int b  = get_border_size();
     const int th = std::min(get_title_height(), (int)frame.height);
 
-    /* Titlebar strip: theme fill (solid or vertical/splitvertical gradient),
-     * baked into a 1px-wide surface and stretched horizontally. */
-    if (th > 0)
+    /* labwc geometry: frame = [ring] inner rect; border wraps ALL sides, the
+     * titlebar sits INSIDE the border. Paint the whole frame in the border
+     * color first (yields all 4 border strips), then overlay the titlebar
+     * fill inset by the border — this leaves no gap between titlebar and
+     * client content. */
+    const float *c = ob_theme_border_color(ob, active);
+    wf::color_t bc(c[0], c[1], c[2], c[3]);
+    data.pass->add_rect(bc, data.target, frame, data.damage);
+
+    const int tb_w = std::max(0, (int)frame.width - 2 * b);
+    const int tb_h = std::min(th, (int)frame.height);
+    if ((tb_w > 0) && (tb_h > 0))
     {
         ensure_fill_texture(active);
         if (fill_tex[active].get_texture().texture)
         {
-            wf::geometry_t tb{frame.x, frame.y, frame.width, th};
+            wf::geometry_t tb{frame.x + b, frame.y, (uint32_t)tb_w,
+                (uint32_t)tb_h};
             data.pass->add_texture(fill_tex[active].get_texture(), data.target,
                 tb, data.damage);
         }
-    }
-
-    /* Border strips in the theme border color. */
-    if (b > 0)
-    {
-        const float *c = ob_theme_border_color(ob, active);
-        wf::color_t bc(c[0], c[1], c[2], c[3]);
-        wf::geometry_t left{frame.x, frame.y + th, (uint32_t)b,
-            (uint32_t)(frame.height - th)};
-        wf::geometry_t right{frame.x + frame.width - b, frame.y + th,
-            (uint32_t)b, (uint32_t)(frame.height - th)};
-        wf::geometry_t bottom{frame.x, frame.y + frame.height - b,
-            (uint32_t)frame.width, (uint32_t)b};
-        data.pass->add_rect(bc, data.target, left, data.damage);
-        data.pass->add_rect(bc, data.target, right, data.damage);
-        data.pass->add_rect(bc, data.target, bottom, data.damage);
     }
 }
 
