@@ -19,5 +19,10 @@
 			<_long>Number of touchpad fingers that trigger the continuous pan swipe.</_long>
 			<default>3</default>
 		</option>
+		<option name="duration" type="animation">
+			<_short>Animation duration</_short>
+			<_long>Duration of the step/snap pan animation in milliseconds.</_long>
+			<default>300</default>
+		</option>
 	</plugin>
 </wayfire>

@@ -14,6 +14,8 @@
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/plugins/common/input-grab.hpp>
+#include <wayfire/util/duration.hpp>
+#include <wayfire/render-manager.hpp>
 #include <wayfire/debug.hpp>
 
 /**
@@ -68,6 +70,7 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
         ipc_repo->unregister_method("proto-pan/drag");
         ipc_repo->unregister_method("proto-pan/get-state");
         cancel_pan();
+        settle_animation();
         teardown_pan_rail();
         LOGI("proto-pan fini on ", output->to_string());
     }
@@ -97,6 +100,56 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
     wf::key_callback on_step_right = [=] (auto) { step(+1); return true; };
 
     wf::option_wrapper_t<int> swipe_fingers{"proto-pan/swipe_fingers"};
+
+    /* Smooth pan animation (vswitch pattern, plugins/vswitch/vswitch.cpp). */
+    struct pan_animation_t : public wf::animation::duration_t
+    {
+        using duration_t::duration_t;
+        wf::animation::timed_transition_t dx{*this};
+    };
+
+    pan_animation_t animation{
+        wf::option_wrapper_t<wf::animation_description_t>{"proto-pan/duration"}};
+
+    /** Advance the animation each frame; stop the hook when done. */
+    wf::effect_hook_t on_frame = [=] ()
+    {
+        if (animation.running())
+        {
+            set_offset_raw((int)std::round(animation.dx));
+            output->render->schedule_redraw();
+        } else
+        {
+            output->render->rem_effect(&on_frame);
+            LOGI("proto-pan animation done: offset=", pan_node->get_offset().x);
+        }
+    };
+
+    /* Animate the content displacement from @from_x to @target_x. */
+    void animate_content_from(int from_x, int target_x)
+    {
+        animation.dx.set(from_x, target_x);
+        animation.start();
+        output->render->add_effect(&on_frame, wf::OUTPUT_EFFECT_PRE);
+        output->render->schedule_redraw();
+    }
+
+    /** If a pan animation is in flight, land it at the nearest tile now. */
+    void settle_animation()
+    {
+        if (!animation.running())
+        {
+            return;
+        }
+
+        output->render->rem_effect(&on_frame);
+        auto W = output->get_screen_size().width;
+        tile_index = std::clamp((int)std::round(-(double)pan_node->get_offset().x / W),
+            0, N_TILES - 1);
+        drag_px    = 0;
+        drag_accum = 0.0;
+        apply_offset();
+    }
 
     /* Input grab during a swipe (vswipe pattern, plugins/single_plugins/vswipe.cpp). */
     std::unique_ptr<wf::input_grab_t> input_grab;
@@ -178,6 +231,8 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
             return false;
         }
 
+        /* If a step animation is in flight, land it where it is now. */
+        settle_animation();
         swiping    = true;
         drag_accum = 0.0;
         input_grab->grab_input(wf::scene::layer::OVERLAY);
@@ -206,16 +261,15 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
 
         swiping = false;
         /* Snap to the tile nearest to the current (clamped) position. */
+        int from = current_content_x();
         auto W = output->get_screen_size().width;
-        tile_index = std::clamp((int)std::round(-(double)current_content_x() / W),
-            0, N_TILES - 1);
+        tile_index = std::clamp((int)std::round(-(double)from / W), 0, N_TILES - 1);
         drag_px    = 0;
         drag_accum = 0.0;
-        apply_offset();
+        animate_content_from(from, -tile_index * W);
         input_grab->ungrab_input();
         output->deactivate_plugin(&grab_interface);
-        LOGI("proto-pan swipe end: i=", tile_index, " offset=",
-            pan_node->get_offset().x);
+        LOGI("proto-pan swipe end: i=", tile_index);
     }
 
     void cancel_pan()
@@ -273,22 +327,29 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
     /** Offset-change pattern from src/view/layer-shell/layer-shell.cpp:99-110:
      * damage the union of old/new bounding boxes (in output coordinates!),
      * then update with the GEOMETRY flag. */
-    void apply_offset()
+    void set_offset_raw(int offset_x)
     {
         wf::region_t damage = pan_node->get_bounding_box();
-        pan_node->set_offset({current_content_x(), 0});
+        pan_node->set_offset({offset_x, 0});
         damage |= pan_node->get_bounding_box();
         wf::scene::damage_node(pan_node, damage);
         wf::scene::update(pan_node, wf::scene::update_flag::GEOMETRY);
     }
 
+    void apply_offset()
+    {
+        set_offset_raw(current_content_x());
+    }
+
     void step(int dir)
     {
+        auto W = output->get_screen_size().width;
+        int from = current_content_x();
         tile_index = std::clamp(tile_index + dir, 0, N_TILES - 1);
         drag_px    = 0;
         drag_accum = 0.0;
-        apply_offset();
-        LOGI("proto-pan step: i=", tile_index, " offset=", pan_node->get_offset().x);
+        animate_content_from(from, -tile_index * W);
+        LOGI("proto-pan step: i=", tile_index, " target=", -tile_index * W);
     }
 
     wf::json_t get_state_json()
@@ -296,7 +357,9 @@ class proto_pan_output_t : public wf::per_output_plugin_instance_t
         wf::json_t r;
         r["tile"]    = tile_index;
         r["tiles"]   = N_TILES;
-        r["offset"]  = pan_node ? pan_node->get_offset().x : 0;
+        /* Logical (target) position vs actual node offset (mid-animation). */
+        r["offset"]  = current_content_x();
+        r["node_offset"] = pan_node ? pan_node->get_offset().x : 0;
         r["drag_px"] = drag_px;
         r["swiping"] = swiping;
         r["has_view"] = has_pan_view;
