@@ -6,14 +6,13 @@
  */
 #include "buffer.h"
 
+#include <drm_fourcc.h>
 #include <assert.h>
 #include <cairo.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* DRM_FORMAT_ARGB8888 == CAIRO_FORMAT_ARGB32 layout (premultiplied). */
-#define OB_FORMAT_ARGB8888 0
 
 static struct lab_data_buffer *buffer_wrap(cairo_surface_t *surface,
 	uint32_t logical_width, uint32_t logical_height, float scale)
@@ -22,7 +21,7 @@ static struct lab_data_buffer *buffer_wrap(cairo_surface_t *surface,
 	buffer->surface_owns_data = false;
 	buffer->surface = surface;
 	buffer->data = cairo_image_surface_get_data(surface);
-	buffer->format = OB_FORMAT_ARGB8888;
+	buffer->format = DRM_FORMAT_ARGB8888;
 	buffer->stride = cairo_image_surface_get_stride(surface);
 	buffer->logical_width = logical_width;
 	buffer->logical_height = logical_height;
@@ -50,7 +49,10 @@ struct lab_data_buffer *buffer_create_from_data(void *pixel_data,
 {
 	cairo_surface_t *surface = cairo_image_surface_create_for_data(
 		pixel_data, CAIRO_FORMAT_ARGB32, width, height, stride);
-	return buffer_wrap(surface, width, height, 1.0f);
+	struct lab_data_buffer *buffer = buffer_wrap(surface, width, height, 1.0f);
+	/* labwc semantics: ownership of pixel_data transfers to the buffer. */
+	buffer->surface_owns_data = true;
+	return buffer;
 }
 
 struct lab_data_buffer *buffer_resize(struct lab_data_buffer *src_buffer,
@@ -71,7 +73,8 @@ struct lab_data_buffer *buffer_resize(struct lab_data_buffer *src_buffer,
 	cairo_paint(cairo);
 	cairo_destroy(cairo);
 
-	buffer_destroy(src_buffer);
+	/* NOTE: labwc semantics — the SOURCE BUFFER STAYS VALID and owned by
+	 * the caller (lab_img_render re-renders from it). Only `dst` is new. */
 	return dst;
 }
 

@@ -30,3 +30,8 @@ subdir('proto-pan')
 executable('include-check', 'tools/include-check.cpp',
   dependencies: [libobtheme_dep],
 )
+
+# T2: theme parsing dump/assert CLI.
+executable('obtheme-dump', 'tools/obtheme-dump.c',
+  dependencies: [libobtheme_dep],
+)

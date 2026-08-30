@@ -36,6 +36,9 @@ int ob_theme_init(struct theme **out, struct ob_theme_config cfg);
 void ob_theme_finish(struct theme *theme);
 
 /* ---- accessors (borrowed data; lifetime = theme) ---- */
+/* Index into the per-state data (theme->window[]); 1 = active. */
+#define OB_THEME_INACTIVE 0
+#define OB_THEME_ACTIVE 1
 static inline int ob_theme_border_width(const struct theme *t)
 {
 	return t->border_width;
@@ -94,6 +97,14 @@ static inline int ob_theme_button_hover_bg_corner_radius(const struct theme *t,
 {
 	(void)active;
 	return t->window_button_hover_bg_corner_radius;
+}
+
+/* Parsed "window.{active,inactive}.button.unpressed.image.color"
+ * (per-button overrides included), baked into the xbm at load time. */
+static inline const float *ob_theme_button_color(const struct theme *t,
+	int active, enum lab_node_type type)
+{
+	return t->window[active].button_colors[type];
 }
 
 /* 1px-wide surface encoding the titlebar background (solid or vertical /

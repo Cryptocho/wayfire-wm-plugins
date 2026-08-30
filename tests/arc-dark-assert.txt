@@ -1,0 +1,43 @@
+# Assertions for ~/.themes/OB-Arc-Dark (Archcraft, by adi1090x).
+# Parsed values must match the themerc exactly.
+
+# geometry: border.width is standard. NOTE: the bare legacy openbox keys
+# padding.width/height are deliberately rejected by labwc ("no longer
+# supported"), so padding stays at the built-in default 0 — same here.
+border_width = 2
+padding_width = 0
+padding_height = 0
+
+# buttons not sized by this theme -> labwc built-in defaults
+button_width = 26
+button_height = 26
+button_spacing = 0
+
+# window.label.text.justify: Center
+justify = center
+
+# Flat Solid backgrounds
+title_bg_active = solid
+title_bg_inactive = solid
+
+# window.{active,inactive}.border.color: #2F343F
+border_color_active = #2f343f
+border_color_inactive = #2f343f
+
+# label text: active #B5BCC9, inactive #7F8898
+label_color_active = #b5bcc9
+label_color_inactive = #7f8898
+
+# universal unpressed image color + per-button close override
+button_color_close_unpressed = #cc575d
+button_color_iconify_unpressed = #7f8898
+button_color_max_unpressed = #7f8898
+
+# all six buttons must render (7 xbm files ship with the theme; shade/desk
+# toggled variants fall back to built-in bitmaps)
+button_render_close = ok
+button_render_iconify = ok
+button_render_max = ok
+button_render_shade = ok
+button_render_desk = ok
+button_render_menu = ok
