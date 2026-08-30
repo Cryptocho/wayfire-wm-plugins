@@ -1,86 +1,68 @@
-# TEST.md — proto-pan 交互测试指南(P0)
+# TEST.md — 交互测试指南
 
-自动化部分(构建、加载、热重载、平移状态机 18 项断言、动画收敛)**已由 agent 全部验证通过**。
-本文件是剩余的**交互/视觉验证**,需要你在嵌套会话里手动执行。
+## P1:ob-decor(openbox 主题装饰)— 待用户执行
 
-> 安全说明:嵌套实例独立于你的主桌面(wayland-1),退出只需关闭那个窗口或在终端 Ctrl+C。
+自动化已全绿:obtheme 解析断言(OB-Arc-Dark + 渐变夹具 + 默认主题)、headless 冒烟。
+以下是剩余的交互/视觉验证。
 
-## 启动嵌套测试会话
+### 启动嵌套测试会话
 
 ```bash
 cd ~/workspace/wm/wayfire-wm-plugins
-WAYFIRE_PLUGIN_PATH=$PWD/build/proto-pan \
+WAYFIRE_PLUGIN_PATH=$PWD/build/ob-decor \
 WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
 WLR_BACKENDS=wayland \
-_WAYFIRE_SOCKET=$XDG_RUNTIME_DIR/wayfire-wm-plugins.sock \
-wayfire -c test/wayfire.ini -d
+wayfire -c test/wayfire-decor.ini -d
 ```
 
-会弹出一个 **1280×720** 的嵌套 wayfire 窗口,画面应为**整屏紫色**(轨道 tile 0)。
+会弹出 1280×720 嵌套窗口。`<super>T` 开 kitty(主桌面未占用的键)。
 
-手动平移命令(另开一个终端;`dir` 为 1/-1):
+### D1 主题装饰外观(OB-Arc-Dark)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 开 kitty | 深色标题栏(#2F343F),标题居中浅灰蓝(#B5BCC9),外围 2px 紫色 ring |
+| 2 | 观察右上按钮 | iconify(−)、maximize(□)、close(**红色圆**)——均为主题 xbm 图片 |
+| 3 | 观察左上 | menu 按钮(↖);点击无动作(惰性,P2 接菜单) |
+| 4 | 点击另一个窗口使 kitty 失焦 | 标题文字变暗(#7F8898),ring 变深色(#2a323b) |
+| 5 | 重新聚焦 kitty | 标题变亮、ring 变紫(active 态) |
+
+### D2 按钮动作
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 双击标题栏 | 切换最大化(再双击还原) |
+| 2 | 点击 maximize 按钮 | 同上;最大化后无边框(ring 也消失),还原后恢复 |
+| 3 | 点击 iconify | 最小化(<super>TAB fast-switcher 可试;还原即可) |
+| 4 | 点击 close | 窗口关闭 |
+| 5 | hover 各按钮 | 图标变亮(hover 色 #B5BCC9 / close #D7787D) |
+
+### D3 resize 边缘
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 拖动窗口边缘(ring+边框区域) | 正常 resize,光标变对应箭头 |
+| 2 | 拖动标题栏 | 移动窗口 |
+
+### D4 主题切换与默认主题
 
 ```bash
-python3 - $XDG_RUNTIME_DIR/wayfire-wm-plugins.sock <<'EOF'
-import json, socket, struct, sys
-s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1])
-p = json.dumps({"method": "proto-pan/step", "data": {"dir": int(sys.argv[2]) if len(sys.argv) > 2 else 1}}).encode()
-s.sendall(struct.pack("<I", len(p)) + p)
-h = b""
-while len(h) < 4: h += s.recv(4 - len(h))
-(l,) = struct.unpack("<I", h); b = b""
-while len(b) < l: b += s.recv(l - len(b))
-print(b.decode())
-EOF
+# 嵌套会话运行中,编辑 test/wayfire-decor.ini: theme = (置空)
 ```
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 置空 theme 保存 | 无变化(热重载未接,重启生效) |
+| 2 | 重启嵌套会话(theme 空) | labwc 内置默认装饰(细边框),不崩溃 |
+
+### D5 已知未实现(勿报 bug)
+
+- pressed 按下瞬间的专属颜色、maximize 的 toggled 态图标(主题里有,解析未接,T5+ 补)
+- shade/desk/menu 按钮动作(P2+)
+- 高分屏 scale>1 未验证
 
 ---
 
-## T1 视觉:三色轨道 + 无残影(S2/S5)
+## P0:proto-pan(已全部通过,2026-08-30)
 
-| 步骤 | 操作 | 预期 |
-|---|---|---|
-| 1 | 启动嵌套会话 | 整屏紫色(#4a1060 附近) |
-| 2 | `<super>F2` | **平滑动画**(约 300ms)过渡到整屏绿色,无残影、无撕裂 |
-| 3 | `<super>F2` ×2 | 第二次到橙色后停住(轨道末端 clamp);动画中连按应流畅接续 |
-| 4 | `<super>F1` ×3 | 依次绿→紫,最后停住(起始端 clamp) |
-| 5 | 动画中随意来回按 F1/F2 | 从当前位置平滑改向,不跳变 |
-
-## T2 键盘平移 + 真实窗口输入命中(S3,核心)
-
-| 步骤 | 操作 | 预期 |
-|---|---|---|
-| 1 | 嵌套会话内按 `<super>T`(`<super>Enter` 已被主桌面占用) | kitty 启动,**但画面仍是紫色**——kitty 被收编到了 tile 1(日志 `adopted view 'kitty'`) |
-| 2 | `<super>F2` | 绿色出现,kitty 叠在其上(它在 x=1280 等着你) |
-| 3 | **点击 kitty 并输入命令**(如 `echo hi`) | 能聚焦、能打字 → **输入命中跟随平移 ✓(本原型最关键验证点)** |
-| 4 | `<super>F1` 回 tile 0,点击 kitty 原本的位置 | 不应命中任何东西(视口外),光标行为如常 |
-
-## T3 触摸板三指滑动连续平移(S4,核心)
-
-| 步骤 | 操作 | 预期 |
-|---|---|---|
-| 1 | 触摸板**三指水平滑动** | 内容**跟手**连续移动(自然方向:手指向左,内容向左) |
-| 2 | 滑过半屏后松手 | 吸附到最近一屏(带 300ms 动画) |
-| 3 | 在 tile 0 位置继续向右滑 | 停在起始端,不越界 |
-| 4 | 滑到末端(橙色)继续向左滑 | 停在轨道末端 |
-| 5 | 滑动进行中观察光标 | 抓取期间指针事件被平移消费,松手后恢复悬停/点击 |
-
-若手指数不触发,检查触摸板驱动;可把 `test/wayfire.ini` 里 `[proto-pan] swipe_fingers`(默认 3)改成 2 试。
-
-## T4 动画手感调节(S5)
-
-在 `test/wayfire.ini` 追加后重启嵌套会话(或用热重载):
-
-```ini
-[proto-pan]
-duration = 100    # 快;再试 1000 慢速
-```
-
-按 F2 对比手感。顺手试试连续快按 F2——应连续平滑改向。
-
----
-
-## 结果反馈
-
-全部跑完后告诉我:哪些通过、哪些不符合预期(截图/录屏更好)。
-我据此更新 AGENTS.md 的原型结论(go/no-go 与已知限制清单)。
+启动:`WAYFIRE_PLUGIN_PATH=$PWD/build/proto-pan WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata WLR_BACKENDS=wayland wayfire -c test/wayfire.ini -d`
+键盘 <super>F1/F2 步进、触摸板三指滑动自由平移、IPC `proto-pan/step|drag|get-state`。结论:全部通过,GO。
