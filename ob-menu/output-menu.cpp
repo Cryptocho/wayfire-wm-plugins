@@ -184,8 +184,11 @@ uint64_t OutputMenu::now_msec()
 
 OutputMenu::OutputMenu(wf::output_t *output) : output(output), pipe(this)
 {
-    /* TEMP: no interactions while bisecting the grab crash */
-    this->input_grab = std::make_unique<wf::input_grab_t>("ob-menu", output);
+    /* route grabbed events to this: the grab node forwards
+     * pointer/touch/keyboard events to the interactions given here;
+     * NULL (the old default) silently drops them all */
+    this->input_grab = std::make_unique<wf::input_grab_t>(
+        "ob-menu", output, this, this, this);
     this->node = std::make_shared<MenuNode>(this);
 }
 
@@ -387,6 +390,11 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
 
 void OutputMenu::handle_pointer_motion_impl(wf::pointf_t global)
 {
+    if (getenv("OB_MENU_INPUT_DEBUG"))
+    {
+        LOGI("ob-menu: pointer motion global=", global.x, ",", global.y);
+    }
+
     if (stack.empty())
     {
         return;
@@ -440,6 +448,11 @@ void OutputMenu::run_actions(MenuItem *item)
 void OutputMenu::handle_pointer_button(const wlr_pointer_button_event& ev,
     bool *dismissed)
 {
+    if (getenv("OB_MENU_INPUT_DEBUG"))
+    {
+        LOGI("ob-menu: pointer button ", ev.button, " state ", ev.state);
+    }
+
     if (stack.empty() || (ev.button != BTN_LEFT))
     {
         return;
@@ -522,6 +535,13 @@ wf::json_t OutputMenu::get_state()
         r["menu_id"] = stack[0].menu->id;
         r["items"]   = (uint64_t)stack[0].menu->items.size();
         r["selected"] = stack[0].selected;
+        /* root level box — used by input-path tests to locate menu rows */
+        wf::json_t rb = wf::json_t::array();
+        rb.append(stack[0].box.x);
+        rb.append(stack[0].box.y);
+        rb.append((uint64_t)stack[0].box.width);
+        rb.append((uint64_t)stack[0].box.height);
+        r["root_box"] = rb;
         wf::json_t lv = wf::json_t::array();
         for (auto &level : stack)
         {

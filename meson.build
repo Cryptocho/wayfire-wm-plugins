@@ -45,5 +45,30 @@ executable('obmenu-dump', ['tools/obmenu-dump.cpp', 'ob-menu/menu-parse.cpp'],
   dependencies: [dep_glib, dep_libxml],
 )
 
+# Input-injection client (virtual keyboard + pointer) for real-input-path
+# menu tests (see scripts/input-path-test.sh). Protocols are copied from
+# the reference wlroots (scroll/subprojects/wlroots/protocol).
+dep_wayland_client = dependency('wayland-client')
+dep_xkbcommon = dependency('xkbcommon')
+wl_scanner = find_program('wayland-scanner')
+gen_protocol = generator(wl_scanner,
+  output: '@BASENAME@-protocol.c',
+  arguments: ['private-code', '@INPUT@', '@OUTPUT@'],
+)
+gen_client_header = generator(wl_scanner,
+  output: '@BASENAME@-client-protocol.h',
+  arguments: ['client-header', '@INPUT@', '@OUTPUT@'],
+)
+vinput_proto_src = [
+  'protocols/virtual-keyboard-unstable-v1.xml',
+  'protocols/wlr-virtual-pointer-unstable-v1.xml',
+]
+vinput_proto_c = gen_protocol.process(vinput_proto_src)
+vinput_proto_h = gen_client_header.process(vinput_proto_src)
+executable('vinput', ['tools/vinput.c', vinput_proto_c, vinput_proto_h],
+  include_directories: include_directories('.'),
+  dependencies: [dep_wayland_client, dep_xkbcommon],
+)
+
 # M3: ob-menu plugin.
 subdir('ob-menu')

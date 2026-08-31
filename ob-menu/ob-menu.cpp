@@ -69,6 +69,7 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
             wf::get_core().seat->get_active_view());
         if (!view)
         {
+            LOGE("ob-menu: client-menu requested but no active toplevel view");
             return;
         }
 
@@ -228,7 +229,9 @@ class wayfire_ob_menu : public wf::plugin_interface_t
             auto *inst  = outputs.get(output);
             if ((op == "open-root") && inst)
             {
-                wf::pointf_t anchor = {100, 100};
+                /* labwc semantics: no explicit position = open at the
+                 * cursor (same as the keybinding path) */
+                wf::pointf_t anchor = output->get_cursor_position();
                 if (data.has_member("x"))
                 {
                     anchor.x = (double)(int)data["x"];
