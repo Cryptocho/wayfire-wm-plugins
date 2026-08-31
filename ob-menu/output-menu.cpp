@@ -8,6 +8,7 @@
 #include <wayfire/scene-operations.hpp>
 #include <wayfire/debug.hpp>
 #include <wayfire/opengl.hpp>
+#include <wayfire/render-manager.hpp>
 #include <wayfire/plugins/common/cairo-util.hpp>
 
 #include <cairo.h>
@@ -48,7 +49,15 @@ class OutputMenu::MenuRenderInstance final : public wf::scene::render_instance_t
     MenuRenderInstance(std::shared_ptr<MenuNode> node,
         wf::scene::damage_callback push_damage) : node(node),
         push_damage(push_damage)
-    {}
+    {
+        /* Forward node damage up the render chain (same as core's
+         * default_render_instance_t). Without this, damage_node() on the
+         * menu node is a dead letter: the output render pass never sees
+         * the region and damage-driven outputs never repaint the menu —
+         * hover/keyboard highlight silently never appears (headless
+         * repaints eagerly and masked the bug). */
+        node->connect(&on_node_damaged);
+    }
 
     void schedule_instructions(
         std::vector<wf::scene::render_instruction_t>& instructions,
@@ -77,6 +86,11 @@ class OutputMenu::MenuRenderInstance final : public wf::scene::render_instance_t
   private:
     std::shared_ptr<MenuNode> node;
     wf::scene::damage_callback push_damage;
+    wf::signal::connection_t<wf::scene::node_damage_signal> on_node_damaged =
+        [=] (wf::scene::node_damage_signal *data)
+    {
+        push_damage(data->region);
+    };
 };
 
 void OutputMenu::MenuNode::gen_render_instances(
@@ -304,7 +318,11 @@ void OutputMenu::close_all(bool restore)
 
 void OutputMenu::sync_damage()
 {
+    /* the MenuRenderInstance forwards this up the render chain (see its
+     * constructor); the explicit frame request covers the case where no
+     * other damage would trigger an output repaint */
     wf::scene::damage_node(node, output->get_layout_geometry());
+    output->render->schedule_redraw();
 }
 
 MenuItem *OutputMenu::hovered_item(wf::pointf_t global, size_t *depth)
@@ -560,6 +578,11 @@ wf::json_t OutputMenu::get_state()
 
 void OutputMenu::handle_keyboard_key(wf::seat_t*, wlr_keyboard_key_event event)
 {
+    if (getenv("OB_MENU_INPUT_DEBUG"))
+    {
+        LOGI("ob-menu: keyboard key ", event.keycode, " state ", event.state);
+    }
+
     if (event.state != WL_KEYBOARD_KEY_STATE_PRESSED)
     {
         return;
