@@ -33,6 +33,15 @@ for _ in $(seq 1 80); do
 done
 [ -S "$SOCK" ] || { echo "FAIL: socket never appeared"; tail -30 "$LOG"; exit 1; }
 
+# wayland socket of the test session (needed for spawning test windows)
+WF_DISPLAY=""
+for _ in $(seq 1 50); do
+    WF_DISPLAY=$(grep -oP "Using socket name \Kwayland-\d+" "$LOG" | tail -1)
+    [ -n "$WF_DISPLAY" ] && break
+    sleep 0.1
+done
+export WF_DISPLAY
+
 python3 "$ROOT/scripts/lm-test.py"
 STATUS=$?
 if [ $STATUS -ne 0 ]; then

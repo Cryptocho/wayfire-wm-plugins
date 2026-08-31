@@ -2,20 +2,30 @@
 /* layout-manager — global layout mode switching: stacking (native floating)
  * <-> sway-style H/V tiling, plus per-view float.
  *
- * M-A: mode state machine + IPC + keybinding skeleton. Later milestones add
- * the tiling tree engine (derived from Wayfire plugins/tile, GPL-2.0-only),
- * harvest/restore migration, float management and divider drag. */
+ * The tiling tree engine is derived from Wayfire plugins/tile (GPL-2.0-only,
+ * (c) Wayfire developers); see lm-tree/lm-wset/lm-ipc headers. */
 #include <wayfire/plugin.hpp>
 #include <wayfire/per-output-plugin.hpp>
 #include <wayfire/signal-definitions.hpp>
 #include <wayfire/output.hpp>
+#include <wayfire/core.hpp>
+#include <wayfire/matcher.hpp>
+#include <wayfire/workspace-set.hpp>
+#include <wayfire/toplevel-view.hpp>
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/option-wrapper.hpp>
 #include <wayfire/bindings-repository.hpp>
 #include <wayfire/debug.hpp>
+#include <wayfire/seat.hpp>
 
+#include <algorithm>
 #include <string>
+
+#include "lm-tree.hpp"
+#include "lm-wset.hpp"
+#include "lm-float.hpp"
+#include "lm-ipc.hpp"
 
 namespace lm
 {
@@ -47,28 +57,41 @@ static bool mode_from_string(const std::string &s, layout_mode_t &out)
     return false;
 }
 
+/** Tile-plugin can_tile_view: dialogs (views with a parent) and views with
+ * a fixed min==max size are never tiled. */
+static bool can_tile_view(wayfire_toplevel_view view)
+{
+    if (view->parent)
+    {
+        return false;
+    }
+
+    if ((view->toplevel()->get_min_size() == view->toplevel()->get_max_size()) &&
+        (view->toplevel()->get_min_size().width > 0) &&
+        (view->toplevel()->get_min_size().height > 0))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 class wayfire_layout_manager;
 
-/* Per-output instance: bindings are registered per-output, but the mode they
+/* Per-output instance: bindings and output-scoped signals. The mode they
  * control is global (a single shared layout mode across all outputs). */
 class lm_output_t : public wf::per_output_plugin_instance_t
 {
   public:
     wayfire_layout_manager *plugin = nullptr;
 
-    void init() override
-    {
-        output->add_activator(key_toggle_mode, &on_toggle_mode);
-        LOGI("layout-manager: bindings registered on ", output->to_string());
-    }
-
-    void fini() override
-    {
-        output->rem_binding(&on_toggle_mode);
-    }
+    void init() override;
+    void fini() override;
 
     /* Defined after wayfire_layout_manager is complete. */
     bool handle_toggle_mode();
+    bool tiling_active();
+    bool want_tile(wayfire_toplevel_view view);
 
   private:
     wf::option_wrapper_t<wf::activatorbinding_t> key_toggle_mode{
@@ -77,11 +100,105 @@ class lm_output_t : public wf::per_output_plugin_instance_t
     {
         return handle_toggle_mode();
     };
+
+    void attach_view(wayfire_toplevel_view view, std::optional<wf::point_t> vp = {})
+    {
+        if (!view->get_wset())
+        {
+            return;
+        }
+
+        lm_workspace_set_data_t::get(view->get_wset()).attach_view(view, vp);
+    }
+
+    void detach_view(wayfire_toplevel_view view, bool reinsert = true)
+    {
+        if (auto node = lm::view_node_t::get_node(view))
+        {
+            lm_workspace_set_data_t::get(view->get_wset()).detach_views({node}, reinsert);
+        }
+    }
+
+    /* Only tiled-worthy views are collected/attached; floated views (user
+     * float or auto-float rules) stay out of the tree. */
+    bool should_tile(wayfire_toplevel_view view);
+
+    wf::signal::connection_t<wf::view_mapped_signal> on_view_mapped =
+        [=] (wf::view_mapped_signal *ev)
+    {
+        auto toplevel = wf::toplevel_cast(ev->view);
+        if (toplevel && tiling_active() && want_tile(toplevel))
+        {
+            attach_view(toplevel);
+        }
+    };
+
+    wf::signal::connection_t<wf::view_tile_request_signal> on_tile_request =
+        [=] (wf::view_tile_request_signal *ev)
+    {
+        if (ev->carried_out || !lm::view_node_t::get_node(ev->view))
+        {
+            return;
+        }
+
+        // we ignore those requests because we manage the tiled state manually
+        ev->carried_out = true;
+    };
+
+    wf::signal::connection_t<wf::view_fullscreen_request_signal>
+    on_fullscreen_request = [=] (wf::view_fullscreen_request_signal *ev)
+    {
+        if (ev->carried_out || !lm::view_node_t::get_node(ev->view))
+        {
+            return;
+        }
+
+        ev->carried_out = true;
+        lm_workspace_set_data_t::get(ev->view->get_wset()).set_view_fullscreen(
+            ev->view, ev->state);
+    };
+
+    void change_view_workspace(wayfire_toplevel_view view,
+        std::optional<wf::point_t> vp = {})
+    {
+        auto existing_node = lm::view_node_t::get_node(view);
+        if (existing_node)
+        {
+            detach_view(view);
+            attach_view(view, vp);
+        }
+    }
+
+    wf::signal::connection_t<wf::view_change_workspace_signal>
+    on_view_change_workspace = [=] (wf::view_change_workspace_signal *ev)
+    {
+        if (ev->old_workspace_valid)
+        {
+            change_view_workspace(ev->view, ev->to);
+        }
+    };
+
+    wf::signal::connection_t<wf::view_minimized_signal> on_view_minimized =
+        [=] (wf::view_minimized_signal *ev)
+    {
+        auto existing_node = lm::view_node_t::get_node(ev->view);
+
+        if (ev->view->minimized && existing_node)
+        {
+            detach_view(ev->view);
+        }
+
+        if (!ev->view->minimized && tiling_active() && want_tile(ev->view))
+        {
+            attach_view(ev->view);
+        }
+    };
 };
 
 class wayfire_layout_manager : public wf::plugin_interface_t
 {
   public:
+    friend class lm_output_t;
     void init() override
     {
         wf::option_wrapper_t<std::string> default_mode{
@@ -94,19 +211,47 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             mode = layout_mode_t::STACKING;
         }
 
+        wf::option_wrapper_t<std::string> float_opt{
+            "layout-manager/float_by_default"};
+        if (!float_opt.value().empty())
+        {
+            float_matcher =
+                std::make_unique<wf::view_matcher_t>("layout-manager/float_by_default");
+        }
+
         outputs.plugin = this;
         outputs.init_output_tracking();
+
+        wf::get_core().connect(&on_view_unmapped);
+        wf::get_core().connect(&on_focus_changed);
+        wf::get_core().connect(&on_view_pre_moved_to_wset);
+        wf::get_core().connect(&on_view_moved_to_wset);
+
         register_ipc();
         LOGI("layout-manager init: mode=", mode_name(mode));
 
-        /* M-B: when default_mode is tiling, migrate existing views after
-         * output tracking is set up. */
+        if (mode == layout_mode_t::TILING)
+        {
+            migrate_to_tiling();
+        }
     }
 
     void fini() override
     {
+        /* Restore the pre-tiling geometry of every collected view before
+         * tearing the trees down (tile does not restore geometry; we do,
+         * matching the "switch back to stacking" semantics). */
+        if (mode == layout_mode_t::TILING)
+        {
+            migrate_to_stacking();
+        }
+
         unregister_ipc();
         outputs.fini_output_tracking();
+        for (auto wset : wf::workspace_set_t::get_all())
+        {
+            wset->erase_data<lm_workspace_set_data_t>();
+        }
     }
 
     bool toggle_mode()
@@ -116,8 +261,16 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         return true;
     }
 
-    /* Mode transitions: M-B adds harvest (stacking -> tiling) and restore
-     * (tiling -> stacking) across all workspace sets. */
+    layout_mode_t get_mode() const
+    {
+        return mode;
+    }
+
+    bool is_tiling() const
+    {
+        return mode == layout_mode_t::TILING;
+    }
+
     void set_mode(layout_mode_t m)
     {
         if (m == mode)
@@ -125,20 +278,242 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             return;
         }
 
-        mode = m;
-        LOGI("layout-manager: mode -> ", mode_name(mode));
-        /* M-B: migrate_to_tiling() / migrate_to_stacking() */
-    }
+        if (m == layout_mode_t::TILING)
+        {
+            mode = m;
+            migrate_to_tiling();
+        } else
+        {
+            migrate_to_stacking();
+            mode = m;
+        }
 
-    layout_mode_t get_mode() const
-    {
-        return mode;
+        LOGI("layout-manager: mode -> ", mode_name(mode));
     }
 
   private:
     layout_mode_t mode = layout_mode_t::STACKING;
 
-    wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
+    /* Auto-float rules: matching views are never tiled. Constructed only
+     * when the option is non-empty (an empty matcher string fails to
+     * parse and would spam the log). */
+    std::unique_ptr<wf::view_matcher_t> float_matcher;
+
+    /* Collect all currently mapped views of every workspace set into their
+     * workspace's tiling tree. */
+    void migrate_to_tiling()
+    {
+        for (auto wo : wf::get_core().output_layout->get_outputs())
+        {
+            harvest_output(wo);
+        }
+    }
+
+    void harvest_output(wf::output_t *wo)
+    {
+        auto wset = wo->wset();
+        if (!wset)
+        {
+            return;
+        }
+
+        auto &data = lm_workspace_set_data_t::get(wset);
+        auto grid  = wset->get_workspace_grid_size();
+        for (int i = 0; i < grid.width; i++)
+        {
+            for (int j = 0; j < grid.height; j++)
+            {
+                wf::point_t vp{i, j};
+                auto views = wset->get_views(wf::WSET_MAPPED_ONLY, vp);
+                std::vector<wayfire_toplevel_view> want;
+                for (auto v : views)
+                {
+                    auto tl = wf::toplevel_cast(v);
+                    if (!tl || !should_tile(tl))
+                    {
+                        continue;
+                    }
+
+                    /* A view may span several workspaces: collect it once,
+                     * on its main workspace. */
+                    if (wset->get_view_main_workspace(tl) != vp)
+                    {
+                        continue;
+                    }
+
+                    want.push_back(tl);
+                }
+
+                /* Row-major order (center y, then center x) gives a
+                 * deterministic, spatially sensible arrangement. */
+                std::sort(want.begin(), want.end(),
+                    [] (wayfire_toplevel_view a, wayfire_toplevel_view b)
+                {
+                    auto ga = a->get_geometry();
+                    auto gb = b->get_geometry();
+                    int cay = ga.y + ga.height / 2;
+                    int cby = gb.y + gb.height / 2;
+                    if (cay != cby)
+                    {
+                        return cay < cby;
+                    }
+
+                    return ga.x + ga.width / 2 < gb.x + gb.width / 2;
+                });
+
+                for (auto v : want)
+                {
+                    auto &st = lm_view_state_t::get(v);
+                    st.pre_tiling = v->get_pending_geometry();
+                    st.has_pre    = true;
+                    data.attach_view(v, vp);
+                }
+            }
+        }
+    }
+
+    /* Untile every view and restore its pre-tiling geometry. Floating views
+     * are not in the trees and are not touched. */
+    void migrate_to_stacking()
+    {
+        for (auto wset : wf::workspace_set_t::get_all())
+        {
+            if (!wset->has_data<lm_workspace_set_data_t>())
+            {
+                continue;
+            }
+
+            auto &data = *wset->get_data<lm_workspace_set_data_t>();
+            std::vector<wayfire_toplevel_view> views;
+            for (auto &col : data.roots)
+            {
+                for (auto &root : col)
+                {
+                    if (root)
+                    {
+                        lm::for_each_view(root,
+                            [&] (wayfire_toplevel_view v)
+                        {
+                            views.push_back(v);
+                        });
+                    }
+                }
+            }
+
+            if (views.empty())
+            {
+                continue;
+            }
+
+            {
+                lm::autocommit_transaction_t tx;
+                for (auto v : views)
+                {
+                    auto &st = lm_view_state_t::get(v);
+                    v->toplevel()->pending().tiled_edges = 0;
+                    if (st.has_pre)
+                    {
+                        v->toplevel()->pending().geometry = st.pre_tiling;
+                    }
+
+                    tx.tx->add_object(v->toplevel());
+                }
+            }
+
+            std::vector<nonstd::observer_ptr<lm::view_node_t>> nodes;
+            for (auto v : views)
+            {
+                if (auto n = lm::view_node_t::get_node(v))
+                {
+                    nodes.push_back(n);
+                }
+            }
+
+            data.detach_views(nodes);
+        }
+    }
+
+    bool should_tile(wayfire_toplevel_view view)
+    {
+        if (!is_tiling() || !can_tile_view(view) ||
+            lm_view_state_t::is_floating(view))
+        {
+            return false;
+        }
+
+        return !float_matcher || !float_matcher->matches(view);
+    }
+
+    /* ---- core-level signal handlers (same split as Wayfire tile) ---- */
+
+    wf::signal::connection_t<wf::view_unmapped_signal> on_view_unmapped =
+        [=] (wf::view_unmapped_signal *ev)
+    {
+        auto toplevel = wf::toplevel_cast(ev->view);
+        if (!toplevel)
+        {
+            return;
+        }
+
+        if (auto node = lm::view_node_t::get_node(ev->view))
+        {
+            wf::dassert(toplevel->get_wset() != nullptr);
+            auto &data = lm_workspace_set_data_t::get(toplevel->get_wset());
+            data.detach_views({node});
+        }
+    };
+
+    wf::signal::connection_t<wf::keyboard_focus_changed_signal>
+    on_focus_changed = [=] (wf::keyboard_focus_changed_signal *ev)
+    {
+        if (auto toplevel = wf::toplevel_cast(wf::node_to_view(ev->new_focus)))
+        {
+            if (toplevel->get_wset() &&
+                wset_has_data(toplevel->get_wset()))
+            {
+                auto &data = lm_workspace_set_data_t::get(toplevel->get_wset());
+                data.consider_exit_fullscreen(toplevel);
+                if (lm::view_node_t::get_node(toplevel))
+                {
+                    data.last_tiled_view = toplevel;
+                }
+            }
+        }
+    };
+
+    static bool wset_has_data(std::shared_ptr<wf::workspace_set_t> wset)
+    {
+        return wset->has_data<lm_workspace_set_data_t>();
+    }
+
+    wf::signal::connection_t<wf::view_pre_moved_to_wset_signal>
+    on_view_pre_moved_to_wset = [=] (wf::view_pre_moved_to_wset_signal *ev)
+    {
+        auto node = lm::view_node_t::get_node(ev->view);
+        if (node)
+        {
+            ev->view->store_data(std::make_unique<lm_keep_state_t>());
+            if (ev->old_wset && ev->old_wset->has_data<lm_workspace_set_data_t>())
+            {
+                lm_workspace_set_data_t::get(ev->old_wset).detach_views({node});
+            }
+        }
+    };
+
+    wf::signal::connection_t<wf::view_moved_to_wset_signal>
+    on_view_moved_to_wset = [=] (wf::view_moved_to_wset_signal *ev)
+    {
+        if (ev->view->has_data<lm_keep_state_t>() && ev->new_wset)
+        {
+            ev->view->erase_data<lm_keep_state_t>();
+            if (is_tiling())
+            {
+                lm_workspace_set_data_t::get(ev->new_wset).attach_view(ev->view);
+            }
+        }
+    };
+
+    /* ---- outputs & IPC ---- */
 
     struct outputs_t : public wf::per_output_tracker_mixin_t<lm_output_t>
     {
@@ -155,7 +530,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         {
             auto inst = std::make_unique<lm_output_t>();
             inst->output = output;
-            inst->plugin = plugin;
+            inst->plugin  = plugin;
             auto ptr = inst.get();
             output_instance[output] = std::move(inst);
             ptr->init();
@@ -163,6 +538,8 @@ class wayfire_layout_manager : public wf::plugin_interface_t
     };
 
     outputs_t outputs;
+
+    wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
 
     void register_ipc()
     {
@@ -180,8 +557,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             wf::json_t r;
             if (!data.has_member("mode"))
             {
-                r["error"] = std::string("missing 'mode' member"
-                    " (" + std::string("tiling|stacking") + ")");
+                r["error"] = std::string("missing 'mode' member (tiling|stacking)");
                 return r;
             }
 
@@ -206,6 +582,12 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             r["mode"] = mode_name(mode);
             return r;
         });
+
+        ipc_repo->register_method("layout-manager/get-layout",
+            [this] (const wf::json_t & params)
+        {
+            return lm::handle_ipc_get_layout(params);
+        });
     }
 
     void unregister_ipc()
@@ -213,13 +595,46 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         ipc_repo->unregister_method("layout-manager/get-mode");
         ipc_repo->unregister_method("layout-manager/set-mode");
         ipc_repo->unregister_method("layout-manager/toggle-mode");
+        ipc_repo->unregister_method("layout-manager/get-layout");
     }
 };
-} // namespace lm
 
-bool lm::lm_output_t::handle_toggle_mode()
+bool lm_output_t::should_tile(wayfire_toplevel_view view)
+{
+    return want_tile(view);
+}
+
+bool lm_output_t::tiling_active()
+{
+    return plugin->is_tiling();
+}
+
+bool lm_output_t::want_tile(wayfire_toplevel_view view)
+{
+    return plugin->should_tile(view);
+}
+
+bool lm_output_t::handle_toggle_mode()
 {
     return plugin->toggle_mode();
 }
+
+void lm_output_t::init()
+{
+    output->add_activator(key_toggle_mode, &on_toggle_mode);
+
+    output->connect(&on_view_mapped);
+    output->connect(&on_tile_request);
+    output->connect(&on_fullscreen_request);
+    output->connect(&on_view_change_workspace);
+    output->connect(&on_view_minimized);
+    LOGI("layout-manager: initialized on ", output->to_string());
+}
+
+void lm_output_t::fini()
+{
+    output->rem_binding(&on_toggle_mode);
+}
+} // namespace lm
 
 DECLARE_WAYFIRE_PLUGIN(lm::wayfire_layout_manager);
