@@ -66,6 +66,10 @@ class decoration_theme_t
 
     wf::option_wrapper_t<std::string> theme_name{"ob-decor/theme"};
     wf::option_wrapper_t<std::string> font{"ob-decor/font"};
+    wf::option_wrapper_t<std::string> font_active{"ob-decor/font_active"};
+    wf::option_wrapper_t<std::string> font_inactive{"ob-decor/font_inactive"};
+    /* per-focus title font: explicit option, falling back to @font */
+    std::string title_font(bool active) const;
     wf::option_wrapper_t<int> ring_w{"ob-decor/ring_width"};
     wf::option_wrapper_t<wf::color_t> ring_active_color{"ob-decor/ring_active_color"};
     wf::option_wrapper_t<wf::color_t> ring_inactive_color{"ob-decor/ring_inactive_color"};

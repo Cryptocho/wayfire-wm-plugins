@@ -20,12 +20,15 @@ struct MenuState
     MenuSet set;
     bool initialized = false;
     /* config kept for lazy theme creation (see theme()) */
-    std::string theme_name, font, font_menuitem, font_menuheader;
+    std::string theme_name, font, font_menuitem, font_menuitem_active,
+        font_menuheader;
     struct theme *theme_owned = nullptr;
 
     void init(const std::string &theme_name_opt,
         const std::string &menu_file_opt, const std::string &font,
-        const std::string &font_menuitem, const std::string &font_menuheader)
+        const std::string &font_menuitem,
+        const std::string &font_menuitem_active,
+        const std::string &font_menuheader)
     {
         if (initialized)
         {
@@ -34,8 +37,9 @@ struct MenuState
 
         this->theme_name      = theme_name_opt;
         this->font            = font;
-        this->font_menuitem   = font_menuitem;
-        this->font_menuheader = font_menuheader;
+        this->font_menuitem        = font_menuitem;
+        this->font_menuitem_active = font_menuitem_active;
+        this->font_menuheader      = font_menuheader;
 
         /* expand leading ~/ */
         std::string menu_file = menu_file_opt;
@@ -80,6 +84,14 @@ struct MenuState
         }
 
         return theme_owned;
+    }
+
+    /* per-state item font: selected entries use font_menuitem_active
+     * when configured (labwc <font place="MenuItem"> spirit) */
+    const std::string& menuitem_font(bool selected) const
+    {
+        return (selected && !font_menuitem_active.empty()) ?
+            font_menuitem_active : font_menuitem;
     }
 
     static MenuState& get()

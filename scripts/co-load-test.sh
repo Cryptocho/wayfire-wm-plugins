@@ -45,6 +45,49 @@ done
 export WF_DISPLAY
 
 STATUS=0
+# REGRESSION (user report): with decor=OB-Arc-Dark, the menu showed the
+# built-in default palette whenever it was opened BEFORE any window got
+# decorated (the decor theme initializes lazily). Open the menu with NO
+# windows present and assert it is dark (the configured themerc).
+python3 - <<'PYEOF'
+import json, os, socket, struct, subprocess, time, sys
+
+SOCK = os.environ["SOCK"]
+WF_DISPLAY = os.environ["WF_DISPLAY"]
+
+def call(method, data=None):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.settimeout(5)
+    s.connect(SOCK)
+    p = json.dumps({"method": method, "data": data or {}}).encode()
+    s.sendall(struct.pack("<I", len(p)) + p)
+    h = s.recv(4); (l,) = struct.unpack("<I", h); b = b""
+    while len(b) < l:
+        b += s.recv(l - len(b))
+    s.close()
+    return json.loads(b)
+
+call("ob-menu/debug", {"op": "open-root", "menu": "root-menu", "x": 300, "y": 300})
+time.sleep(0.5)
+st = call("ob-menu/debug", {"op": "get-state"}).get("state")
+box = st.get("root_box")
+out = subprocess.run(["grim", "-t", "ppm", "-"],
+    env={**os.environ, "WAYLAND_DISPLAY": WF_DISPLAY}, capture_output=True).stdout
+hdr = out.index(b"255\n") + 4
+W = 1280
+px = out[hdr:]
+x0, y0, bw, bh = box
+tot = n = 0
+for yy in range(y0 + 2, min(y0 + bh - 2, 720)):
+    row = px[(yy * W + x0 + 2) * 3:(yy * W + min(x0 + bw - 2, W)) * 3]
+    tot += sum(row); n += len(row)
+avg = tot / n
+print(f"[{'ok' if avg < 120 else 'FAIL'}] menu dark BEFORE any window (no-window open), avg {avg:.0f}")
+call("ob-menu/debug", {"op": "close"})
+if avg >= 120:
+    sys.exit(1)
+PYEOF
+[ $? -eq 0 ] || { echo "FAIL: no-window menu theme test"; exit 1; }
+
 # the interactive ini has no autostart section; spawn the test view directly
 WAYLAND_DISPLAY="$WF_DISPLAY" kitty >/dev/null 2>&1 &
 KPID=$!
@@ -126,6 +169,32 @@ for yy in range(y0 + 2, min(y0 + bh - 2, 720)):
 avg = tot / n
 print(f"[{'ok' if avg < 120 else 'FAIL'}] menu uses decor theme (dark), avg brightness {avg:.0f}")
 if avg >= 120:
+    sys.exit(1)
+
+# REGRESSION (user report): hover highlight / title rows used to bleed
+# past the menu's right edge (row width included both borders). Hover a
+# row and check: highlight reaches the row's right end INSIDE the border,
+# and nothing bleeds OUTSIDE the menu.
+subprocess.run([VINPUT, WF_DISPLAY, "move", "-5000", "-5000"])
+subprocess.run([VINPUT, WF_DISPLAY, "move", str(box[0] + 40), str(box[1] + 12)])
+time.sleep(0.6)
+st = call("ob-menu/debug", {"op": "get-state"}).get("state")
+assert st.get("selected") == 0, st
+border = 8  # OB-Arc-Dark menu.border.width
+out = subprocess.run(["grim", "-t", "ppm", "-"],
+    env={**os.environ, "WAYLAND_DISPLAY": WF_DISPLAY}, capture_output=True).stdout
+hdr2 = out.index(b"255\n") + 4
+px = out[hdr2:]
+def pixel(x, y):
+    i = (y * W + x) * 3
+    return tuple(px[i:i + 3])
+ymid = box[1] + 12
+inside = pixel(box[0] + border + (box[2] - 2 * border) - 4, ymid)
+outside = pixel(box[0] + box[2] + 3, ymid)
+is_blue = lambda c: c[2] > 150 and c[2] > c[0] + 40
+print(f"[{'ok' if is_blue(inside) else 'FAIL'}] highlight reaches row right end inside border {inside}")
+print(f"[{'ok' if not is_blue(outside) else 'FAIL'}] no highlight outside the menu {outside}")
+if not is_blue(inside) or is_blue(outside):
     sys.exit(1)
 call("ob-menu/debug", {"op": "close"})
 EOF

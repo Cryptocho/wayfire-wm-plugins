@@ -17,6 +17,7 @@
 #include <wayfire/workarea.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 
 namespace obmenu
@@ -105,6 +106,38 @@ void OutputMenu::MenuNode::gen_render_instances(
 
 /* ------------------------------------------------------------------ */
 
+/* Small filled triangle marking entries with submenus: points right
+ * while closed, down once the submenu is the open next level. */
+static cairo_surface_t *render_submenu_arrow(int w, int h,
+    const float *color, bool expanded)
+{
+    auto surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    auto cr = cairo_create(surf);
+    if (color[3] > 0.0f)
+    {
+        /* premultiplied theme color -> straight alpha for cairo */
+        cairo_set_source_rgba(cr, color[0] / color[3],
+            color[1] / color[3], color[2] / color[3], color[3]);
+    }
+
+    if (expanded)
+    {
+        cairo_move_to(cr, 0, h * 0.3);
+        cairo_line_to(cr, w, h * 0.3);
+        cairo_line_to(cr, w / 2.0, h * 0.8);
+    } else
+    {
+        cairo_move_to(cr, w * 0.3, 0);
+        cairo_line_to(cr, w, h / 2.0);
+        cairo_line_to(cr, w * 0.3, h);
+    }
+
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    cairo_destroy(cr);
+    return surf;
+}
+
 static cairo_surface_t *render_menu_text(const std::string &text, int width,
     int height, const std::string &font, const float *color,
     enum lab_justification justify)
@@ -133,6 +166,11 @@ static cairo_surface_t *render_menu_text(const std::string &text, int width,
     }
 
     cairo_set_source_rgba(cr, color[0], color[1], color[2], color[3]);
+    /* vertically center the layout in the row surface: show_layout draws
+     * from the top by default, leaving the row looking top-heavy */
+    PangoRectangle logical;
+    pango_layout_get_pixel_extents(layout, NULL, &logical);
+    cairo_move_to(cr, 0, (height - logical.height) / 2.0);
     pango_cairo_show_layout(cr, layout);
     pango_font_description_free(desc);
     g_object_unref(layout);
@@ -269,7 +307,8 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
     for (size_t i = 0; i < menu->items.size(); i++)
     {
         int rh = menu_row_height(*menu, i, theme.theme());
-        level.item_rects.push_back({pos.x + b, y, (uint32_t)w, (uint32_t)rh});
+        level.item_rects.push_back({pos.x + b, y,
+            (uint32_t)std::max(0, w - 2 * b), (uint32_t)rh});
         y += rh;
     }
 
@@ -390,10 +429,10 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
     struct theme *ob = state.theme();
     const int b = ob_theme_menu_border_width(ob);
     const int px = ob_theme_menu_items_padding_x(ob);
-    const std::string font = ob_theme_font_string(OB_FONT_MENUITEM);
 
-    for (auto &level : stack)
+    for (size_t li = 0; li < stack.size(); li++)
     {
+        auto &level = stack[li];
         /* border-colored backdrop for the whole menu */
         const float *bc = ob_theme_menu_border_color(ob);
         data.pass->add_rect(wf::color_t(bc[0], bc[1], bc[2], bc[3]),
@@ -416,9 +455,9 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
                     const int th = ob_theme_menu_separator_thickness(ob);
                     const int pw = ob_theme_menu_separator_padding_width(
                         ob);
-                    wf::geometry_t line{irect.x + px + pw,
+                    wf::geometry_t line{irect.x + pw,
                         irect.y + py, (uint32_t)std::max(0,
-                        (int)irect.width - 2 * (px + pw)), (uint32_t)th};
+                        (int)irect.width - 2 * pw), (uint32_t)th};
                     data.pass->add_rect(
                         wf::color_t(sc[0], sc[1], sc[2], sc[3]),
                         data.target, line, data.damage);
@@ -456,18 +495,39 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
                 ob) : ob_theme_menu_items_bg(ob);
             const float *fg  = sel ? ob_theme_menu_items_active_text(
                 ob) : ob_theme_menu_items_text(ob);
+            const std::string &font = state.menuitem_font(sel);
 
-            /* item content rect (inside the border) */
-            wf::geometry_t content{irect.x + b, irect.y, irect.width - 2 * b,
-                irect.height};
+            /* row highlight fills the row (already inside the border) */
             data.pass->add_rect(wf::color_t(bg[0], bg[1], bg[2], bg[3]),
-                data.target, content, data.damage);
+                data.target, irect, data.damage);
+
+            /* submenu indicator: small arrow on the left edge, pointing
+             * down while this item's submenu is the open next level;
+             * nudged 1px down to sit on the label's optical line */
+            if (item->submenu)
+            {
+                const int ind = ob_theme_menu_submenu_indent(ob);
+                const bool expanded = ((li + 1) < stack.size()) &&
+                    (stack[li + 1].via_item == item.get());
+                const int ah = std::min(8, (int)irect.height / 2);
+                const int aw = ah;
+                const int ax = irect.x + std::max(1, (ind - aw) / 2);
+                const int ay = irect.y + (irect.height - ah) / 2 + 1;
+                auto surf = render_submenu_arrow(aw, ah, fg, expanded);
+                wf::owned_texture_t tex{surf};
+                cairo_surface_destroy(surf);
+                wf::geometry_t arrow_rect{(uint32_t)ax, (uint32_t)ay,
+                    (uint32_t)aw, (uint32_t)ah};
+                data.pass->add_texture(tex.get_texture(), data.target,
+                    arrow_rect, data.damage);
+            }
 
             /* text (inset by horizontal padding) */
-            wf::geometry_t text_rect{content.x + px, content.y,
-                content.width - 2 * px, content.height};
+            wf::geometry_t text_rect{irect.x + px, irect.y,
+                irect.width - 2 * px, irect.height};
             auto surface = render_menu_text(item->text, text_rect.width,
-                text_rect.height, font, fg, LAB_JUSTIFY_LEFT);
+                text_rect.height, font, fg,
+                ob_theme_menu_items_justify(ob));
             wf::owned_texture_t tex{surface};
             cairo_surface_destroy(surface);
             data.pass->add_texture(tex.get_texture(), data.target, text_rect,

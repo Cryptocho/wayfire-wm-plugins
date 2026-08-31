@@ -160,6 +160,10 @@ struct theme {
 	enum lab_justification menu_title_text_justify;
 	float menu_title_text_color[4];
 
+	/* justify of item labels + left indicator width for submenus */
+	enum lab_justification menu_items_text_justify;
+	int menu_submenu_indent;
+
 	int osd_border_width;
 
 	float osd_bg_color[4];

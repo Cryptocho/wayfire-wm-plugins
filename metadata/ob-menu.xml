@@ -24,6 +24,11 @@
 			<_long>Empty value inherits ob-menu/font.</_long>
 			<default>sans 10</default>
 		</option>
+		<option name="font_menuitem_active" type="string">
+			<_short>Selected item font</_short>
+			<_long>Pango font for the selected (hovered) item. Empty value inherits ob-menu/font_menuitem.</_long>
+			<default></default>
+		</option>
 		<option name="font_menuheader" type="string">
 			<_short>Menu header font</_short>
 			<_long>Empty value inherits ob-menu/font.</_long>

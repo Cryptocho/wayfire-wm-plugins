@@ -197,6 +197,29 @@ vinput("move", "600", "400")  # far from the menu
 vinput("click", hex(BTN_LEFT))
 check("outside click closed the tree", not state().get("open"), str(state()))
 
+# --- desktop right-click opens the root menu (labwc desktop-menu) ------
+# empty desktop spot: far from the kitty window(s)
+menu("close")
+vinput("move", "-5000", "-5000")
+vinput("move", "1150", "680")
+vinput("click", hex(0x111))  # BTN_RIGHT
+st = state()
+check("desktop right-click opens root-menu",
+      st.get("menu_id") == "root-menu", str(st))
+menu("close")
+# right-click on a window must NOT open it (client keeps the click)
+k = kitty_views()
+if k:
+    g = k[0]["geometry"]
+    vinput("move", "-5000", "-5000")
+    vinput("move", str(g["x"] + 50), str(g["y"] + 50))
+    vinput("click", hex(0x111))
+    st = state()
+    check("right-click on window does not open the menu",
+          not st.get("open"), str(st))
+else:
+    skip("window right-click check", "no kitty view")
+
 print()
 if failures:
     print(f"INPUT-PATH TEST FAIL: {len(failures)} failures: {failures}")

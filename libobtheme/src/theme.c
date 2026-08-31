@@ -596,6 +596,9 @@ theme_builtin(struct theme *theme)
 	theme->menu_title_text_justify = parse_justification("Center");
 	parse_hexstr("#ffffff", theme->menu_title_text_color);
 
+	theme->menu_items_text_justify = parse_justification("Center");
+	theme->menu_submenu_indent = 12;
+
 	theme->osd_window_switcher_classic.width = 600;
 	theme->osd_window_switcher_classic.width_is_percent = false;
 	theme->osd_window_switcher_classic.padding = 4;
@@ -941,6 +944,13 @@ entry(struct theme *theme, const char *key, const char *value)
 	}
 	if (match_glob(key, "menu.title.text.color")) {
 		parse_color(value, theme->menu_title_text_color);
+	}
+	if (match_glob(key, "menu.items.text.justify")) {
+		theme->menu_items_text_justify = parse_justification(value);
+	}
+	if (match_glob(key, "menu.submenu.indent")) {
+		theme->menu_submenu_indent = get_int_if_positive(
+			value, "menu.submenu.indent");
 	}
 
 	if (match_glob(key, "osd.bg.color")) {

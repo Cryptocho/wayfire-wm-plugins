@@ -11,19 +11,30 @@ namespace odecor
 {
 decoration_theme_t::decoration_theme_t()
 {
-    struct ob_theme_config cfg = {};
-    std::string name  = theme_name;
-    std::string fnt   = font;
-    std::string lay   = "menu:iconify,max,close";
-    cfg.theme_name      = name.c_str();
-    cfg.font            = fnt.c_str();
-    cfg.titlebar_layout = lay.c_str();
-    ob_theme_init(&ob, cfg);
+    /* The vendored theme engine keeps colors/layouts in ONE global rc
+     * shim: only one theme instance may exist per process, and each
+     * decorated view constructs a decoration_theme_t. Reusing the live
+     * instance (first consumer initializes it) is what keeps every view
+     * consistent; the old per-view init + finish pair nulled rc.theme on
+     * the first destructor and crashed hover rendering on the rest. */
+    ob = ob_theme_current();
+    if (!ob)
+    {
+        struct ob_theme_config cfg = {};
+        std::string name  = theme_name;
+        std::string fnt   = font;
+        std::string lay   = "menu:iconify,max,close";
+        cfg.theme_name      = name.c_str();
+        cfg.font            = fnt.c_str();
+        cfg.titlebar_layout = lay.c_str();
+        ob_theme_init(&ob, cfg);
+    }
 }
 
 decoration_theme_t::~decoration_theme_t()
 {
-    ob_theme_finish(ob);
+    /* singleton lifetime = process; do NOT ob_theme_finish here (it
+     * nulls the shared rc.theme for every other consumer) */
 }
 
 int decoration_theme_t::get_title_height() const
@@ -161,6 +172,19 @@ wf::texture_t decoration_theme_t::get_button_texture(
     return it->second.get_texture();
 }
 
+std::string decoration_theme_t::title_font(bool active) const
+{
+    /* labwc rc.xml <font place="ActiveWindow"> semantics: separate
+     * per-focus fonts; empty option falls back to ob-decor/font */
+    auto &opt = active ? font_active : font_inactive;
+    if (!((std::string)opt).empty())
+    {
+        return opt;
+    }
+
+    return font;
+}
+
 cairo_surface_t *decoration_theme_t::render_text(std::string text,
     int width, int height, bool active) const
 {
@@ -177,7 +201,7 @@ cairo_surface_t *decoration_theme_t::render_text(std::string text,
     auto cr = cairo_create(surface);
 
     PangoFontDescription *font_desc =
-        pango_font_description_from_string(((std::string)font).c_str());
+        pango_font_description_from_string(title_font(active).c_str());
     PangoLayout *layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, font_desc);
     pango_layout_set_text(layout, text.c_str(), text.size());

@@ -252,6 +252,20 @@ static inline enum lab_justification ob_theme_menu_title_justify(
 	return t->menu_title_text_justify;
 }
 
+static inline enum lab_justification ob_theme_menu_items_justify(
+	const struct theme *t)
+{
+	return t->menu_items_text_justify;
+}
+
+/* Width (px) reserved on the left of an item row for the submenu
+ * indicator (openbox draws arrows on the right, we draw a small arrow
+ * on the left per user preference). */
+static inline int ob_theme_menu_submenu_indent(const struct theme *t)
+{
+	return t->menu_submenu_indent;
+}
+
 /* Height (px) of the font for the given place (OB_FONT_*). */
 int ob_theme_font_height(int place);
 

@@ -14,6 +14,16 @@
 			<_long>Pango font description for the titlebar text (themerc carries no window fonts, same as labwc).</_long>
 			<default>sans 10</default>
 		</option>
+		<option name="font_active" type="string">
+			<_short>Title font (focused)</_short>
+			<_long>Pango font for the titlebar text of the focused window (labwc rc.xml place="ActiveWindow"). Empty value inherits ob-decor/font.</_long>
+			<default></default>
+		</option>
+		<option name="font_inactive" type="string">
+			<_short>Title font (unfocused)</_short>
+			<_long>Pango font for the titlebar text of unfocused windows (place="InactiveWindow"). Empty value inherits ob-decor/font.</_long>
+			<default></default>
+		</option>
 		<option name="titlebar_layout" type="string">
 			<_short>Titlebar button layout</_short>
 			<_long>labwc syntax: optional "left:right" split on a single colon, buttons comma-separated (icon|menu|iconify|max|close|shade|desk).</_long>

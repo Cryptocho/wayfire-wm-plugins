@@ -14,6 +14,8 @@
 #include <wayfire/bindings-repository.hpp>
 #include <wayfire/workarea.hpp>
 #include <wayfire/debug.hpp>
+#include <wayfire/view.hpp>
+#include <linux/input-event-codes.h>
 
 #include <algorithm>
 #include <map>
@@ -198,15 +200,38 @@ class wayfire_ob_menu : public wf::plugin_interface_t
     {
         auto &state = MenuState::get();
         wf::option_wrapper_t<std::string> theme_name{"ob-menu/theme_name"};
+        std::string tn = theme_name.value();
+        if (tn.empty())
+        {
+            /* Follow ob-decor's theme when ob-menu has none of its own:
+             * ob-decor initializes its theme lazily (first decorated view),
+             * so the menu may build its theme BEFORE that — the fallback
+             * must use the same theme or the menu shows built-in defaults
+             * until a window appears. */
+            try
+            {
+                wf::option_wrapper_t<std::string> decor_theme{"ob-decor/theme"};
+                tn = decor_theme.value();
+            }
+            catch (const std::exception&)
+            {
+                /* ob-decor not loaded / no such option: built-in defaults */
+            }
+        }
+
         wf::option_wrapper_t<std::string> menu_file{"ob-menu/menu_file"};
         wf::option_wrapper_t<std::string> font{"ob-menu/font"};
         wf::option_wrapper_t<std::string> font_mi{"ob-menu/font_menuitem"};
+        wf::option_wrapper_t<std::string> font_mia{
+            "ob-menu/font_menuitem_active"};
         wf::option_wrapper_t<std::string> font_mh{"ob-menu/font_menuheader"};
-        state.init(theme_name, menu_file, font, font_mi, font_mh);
-        LOGI("ob-menu init: ", state.set.menus.size(), " menus parsed");
+        state.init(tn, menu_file, font, font_mi, font_mia, font_mh);
+        LOGI("ob-menu init: ", state.set.menus.size(), " menus parsed, theme='",
+            tn, "'");
 
         outputs.init_output_tracking();
         register_ipc();
+        wf::get_core().connect(&on_desktop_right_click);
     }
 
     void fini() override
@@ -216,6 +241,69 @@ class wayfire_ob_menu : public wf::plugin_interface_t
     }
 
   private:
+    /* labwc desktop-menu behavior: a right-click that does NOT land on
+     * any view's surface (i.e. empty workspace) opens the root menu.
+     * Right-clicks on views pass through untouched so clients keep their
+     * own context menus; button bindings would swallow those, hence the
+     * signal route. */
+    bool right_click_swallowed = false;
+    wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>>
+    on_desktop_right_click =
+        [=] (wf::input_event_signal<wlr_pointer_button_event> *ev)
+    {
+        if (ev->event->button != BTN_RIGHT)
+        {
+            return;
+        }
+
+        if (right_click_swallowed)
+        {
+            /* swallow the matching release so clients don't see a
+             * release without a press */
+            if (ev->event->state == WL_POINTER_BUTTON_STATE_RELEASED)
+            {
+                right_click_swallowed = false;
+            }
+
+            ev->mode = wf::input_event_processing_mode_t::IGNORE;
+            return;
+        }
+
+        if ((ev->mode != wf::input_event_processing_mode_t::FULL) ||
+            (ev->event->state != WL_POINTER_BUTTON_STATE_PRESSED))
+        {
+            return;
+        }
+
+        auto gc     = wf::get_core().get_cursor_position();
+        auto wo     = wf::get_core().output_layout->get_output_at(gc.x, gc.y);
+        auto *inst  = wo ? outputs.get(wo) : nullptr;
+        if (!inst)
+        {
+            return;
+        }
+
+        /* menu open: its own grab handles outside-click close */
+        auto *rt = inst->get_runtime();
+        if (rt && rt->is_open())
+        {
+            return;
+        }
+
+        /* on a view (window/decoration/panel): client keeps the click */
+        if (wf::get_core().get_cursor_focus_view())
+        {
+            return;
+        }
+
+        auto g = wo->get_layout_geometry();
+        wf::get_core().seat->focus_output(wo);
+        inst->open_menu_at("root-menu",
+            wf::pointf_t{gc.x - (double)g.x, gc.y - (double)g.y});
+        right_click_swallowed = true;
+        ev->mode = wf::input_event_processing_mode_t::IGNORE;
+    };
+
     wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
 
     struct outputs_t : public wf::per_output_tracker_mixin_t<ob_menu_output_t>
