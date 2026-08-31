@@ -18,10 +18,13 @@ namespace obmenu
 struct MenuState
 {
     MenuSet set;
-    struct theme *ob = nullptr;
     bool initialized = false;
+    /* config kept for lazy theme creation (see theme()) */
+    std::string theme_name, font, font_menuitem, font_menuheader;
+    struct theme *theme_owned = nullptr;
 
-    void init(const std::string &menu_file_opt, const std::string &font,
+    void init(const std::string &theme_name_opt,
+        const std::string &menu_file_opt, const std::string &font,
         const std::string &font_menuitem, const std::string &font_menuheader)
     {
         if (initialized)
@@ -29,21 +32,10 @@ struct MenuState
             return;
         }
 
-        /* The vendored theme engine keeps colors/layouts in ONE global rc
-         * shim: only a single theme instance may exist per process. If
-         * ob-decor (or any ob_* consumer) already initialized one, reuse
-         * it — menu colors then come from the same themerc (e.g. the
-         * active-item highlight color). */
-        ob = ob_theme_current();
-        if (!ob)
-        {
-            struct ob_theme_config cfg = {};
-            cfg.theme_name      = "";
-            cfg.font            = font.c_str();
-            cfg.font_menuitem   = font_menuitem.c_str();
-            cfg.font_menuheader = font_menuheader.c_str();
-            ob_theme_init(&ob, cfg);
-        }
+        this->theme_name      = theme_name_opt;
+        this->font            = font;
+        this->font_menuitem   = font_menuitem;
+        this->font_menuheader = font_menuheader;
 
         /* expand leading ~/ */
         std::string menu_file = menu_file_opt;
@@ -61,6 +53,33 @@ struct MenuState
 
         add_default_menus(set);
         initialized = true;
+    }
+
+    /* The vendored theme engine keeps colors/layouts in ONE global rc
+     * shim: only a single theme instance may exist per process, and its
+     * consumers initialize lazily (ob-menu at plugin init, ob-decor when
+     * the first view gets decorated). Always read the live instance so
+     * the menu follows the most recently initialized theme (typically
+     * ob-decor's themerc, e.g. the menu highlight color); if nobody has
+     * initialized one yet, build our own from the ob-menu options. */
+    struct theme *theme()
+    {
+        if (auto *t = ob_theme_current())
+        {
+            return t;
+        }
+
+        if (!theme_owned)
+        {
+            struct ob_theme_config cfg = {};
+            cfg.theme_name      = theme_name.c_str();
+            cfg.font            = font.c_str();
+            cfg.font_menuitem   = font_menuitem.c_str();
+            cfg.font_menuheader = font_menuheader.c_str();
+            ob_theme_init(&theme_owned, cfg);
+        }
+
+        return theme_owned;
     }
 
     static MenuState& get()

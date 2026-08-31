@@ -4,6 +4,11 @@
 		<_short>Openbox Menu</_short>
 		<_long>Openbox menu.xml menu system themed by themerc menu.* keys.</_long>
 		<category>Window Management</category>
+		<option name="theme_name" type="string">
+			<_short>Theme name</_short>
+			<_long>Openbox theme for the menu, used only when no other ob_* consumer (ob-decor) has initialized a theme yet. Empty = built-in defaults.</_long>
+			<default></default>
+		</option>
 		<option name="menu_file" type="string">
 			<_short>Menu file</_short>
 			<_long>Path to an openbox menu.xml. Empty = ~/.config/openbox/menu.xml, then built-in defaults.</_long>

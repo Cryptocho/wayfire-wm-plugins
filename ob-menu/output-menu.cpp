@@ -234,8 +234,8 @@ static int menu_row_height(const Menu& menu, size_t idx, struct theme *ob)
 void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
 {
     auto &theme = MenuState::get();
-    const int b  = ob_theme_menu_border_width(theme.ob);
-    const int px = ob_theme_menu_items_padding_x(theme.ob);
+    const int b  = ob_theme_menu_border_width(theme.theme());
+    const int px = ob_theme_menu_items_padding_x(theme.theme());
 
     int max_w = 0;
     for (auto &item : menu->items)
@@ -259,7 +259,7 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
     int h = 2 * b;
     for (size_t i = 0; i < menu->items.size(); i++)
     {
-        h += menu_row_height(*menu, i, theme.ob);
+        h += menu_row_height(*menu, i, theme.theme());
     }
 
     level.menu = menu;
@@ -268,7 +268,7 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
     int y = pos.y + b;
     for (size_t i = 0; i < menu->items.size(); i++)
     {
-        int rh = menu_row_height(*menu, i, theme.ob);
+        int rh = menu_row_height(*menu, i, theme.theme());
         level.item_rects.push_back({pos.x + b, y, (uint32_t)w, (uint32_t)rh});
         y += rh;
     }
@@ -387,14 +387,15 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
     }
 
     auto &state = MenuState::get();
-    const int b = ob_theme_menu_border_width(state.ob);
-    const int px = ob_theme_menu_items_padding_x(state.ob);
+    struct theme *ob = state.theme();
+    const int b = ob_theme_menu_border_width(ob);
+    const int px = ob_theme_menu_items_padding_x(ob);
     const std::string font = ob_theme_font_string(OB_FONT_MENUITEM);
 
     for (auto &level : stack)
     {
         /* border-colored backdrop for the whole menu */
-        const float *bc = ob_theme_menu_border_color(state.ob);
+        const float *bc = ob_theme_menu_border_color(ob);
         data.pass->add_rect(wf::color_t(bc[0], bc[1], bc[2], bc[3]),
             data.target, level.box, data.damage);
 
@@ -409,12 +410,12 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
                 {
                     /* labwc: horizontal line, centered, inset by the
                      * horizontal padding */
-                    const float *sc = ob_theme_menu_separator_color(state.ob);
+                    const float *sc = ob_theme_menu_separator_color(ob);
                     const int py = ob_theme_menu_separator_padding_height(
-                        state.ob);
-                    const int th = ob_theme_menu_separator_thickness(state.ob);
+                        ob);
+                    const int th = ob_theme_menu_separator_thickness(ob);
                     const int pw = ob_theme_menu_separator_padding_width(
-                        state.ob);
+                        ob);
                     wf::geometry_t line{irect.x + px + pw,
                         irect.y + py, (uint32_t)std::max(0,
                         (int)irect.width - 2 * (px + pw)), (uint32_t)th};
@@ -425,8 +426,8 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
                 {
                     /* labeled separator = title row: title bg + centered
                      * text in the title color (labwc menu.title.*) */
-                    const float *bg = ob_theme_menu_title_bg(state.ob);
-                    const float *fg = ob_theme_menu_title_text(state.ob);
+                    const float *bg = ob_theme_menu_title_bg(ob);
+                    const float *fg = ob_theme_menu_title_text(ob);
                     data.pass->add_rect(
                         wf::color_t(bg[0], bg[1], bg[2], bg[3]),
                         data.target, irect, data.damage);
@@ -452,9 +453,9 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
 
             const bool sel = ((int)i == level.selected);
             const float *bg  = sel ? ob_theme_menu_items_active_bg(
-                state.ob) : ob_theme_menu_items_bg(state.ob);
+                ob) : ob_theme_menu_items_bg(ob);
             const float *fg  = sel ? ob_theme_menu_items_active_text(
-                state.ob) : ob_theme_menu_items_text(state.ob);
+                ob) : ob_theme_menu_items_text(ob);
 
             /* item content rect (inside the border) */
             wf::geometry_t content{irect.x + b, irect.y, irect.width - 2 * b,
@@ -861,12 +862,13 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
 
     auto &parent = stack[level_idx];
     auto &state  = MenuState::get();
-    const int ox = ob_theme_menu_overlap_x(state.ob);
-    const int oy = ob_theme_menu_overlap_y(state.ob);
-    const int b  = ob_theme_menu_border_width(state.ob);
+    struct theme *ob = state.theme();
+    const int ox = ob_theme_menu_overlap_x(ob);
+    const int oy = ob_theme_menu_overlap_y(ob);
+    const int b  = ob_theme_menu_border_width(ob);
 
     /* measure child size */
-    const int px = ob_theme_menu_items_padding_x(state.ob);
+    const int px = ob_theme_menu_items_padding_x(ob);
     int max_w = 0;
     for (auto &it : item->submenu->items)
     {
@@ -887,7 +889,7 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
     int h = 2 * b;
     for (size_t i = 0; i < item->submenu->items.size(); i++)
     {
-        h += menu_row_height(*item->submenu, i, state.ob);
+        h += menu_row_height(*item->submenu, i, state.theme());
     }
     const auto &anchor_rect = parent.item_rects[
         parent.selected >= 0 ? parent.selected : 0];

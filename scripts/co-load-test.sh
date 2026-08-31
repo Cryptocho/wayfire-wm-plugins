@@ -106,6 +106,28 @@ subprocess.run([VINPUT, WF_DISPLAY, "move", "0", "2"])
 time.sleep(0.3)
 r = call("ob-menu/debug", {"op": "get-state"})
 print("[ok] compositor alive after button hover with menu initialized:", bool(r))
+
+# menu theme follows ob-decor's themerc (regression: menu used to show
+# built-in defaults when its init raced ahead of the decor theme init)
+call("ob-menu/debug", {"op": "open-root", "menu": "root-menu", "x": 300, "y": 300})
+time.sleep(0.5)
+st = call("ob-menu/debug", {"op": "get-state"}).get("state")
+box = st.get("root_box")
+out = subprocess.run(["grim", "-t", "ppm", "-"],
+    env={**os.environ, "WAYLAND_DISPLAY": WF_DISPLAY}, capture_output=True).stdout
+hdr = out.index(b"255\n") + 4
+W = 1280
+px = out[hdr:]
+x0, y0, bw, bh = box
+tot = n = 0
+for yy in range(y0 + 2, min(y0 + bh - 2, 720)):
+    row = px[(yy * W + x0 + 2) * 3:(yy * W + min(x0 + bw - 2, W)) * 3]
+    tot += sum(row); n += len(row)
+avg = tot / n
+print(f"[{'ok' if avg < 120 else 'FAIL'}] menu uses decor theme (dark), avg brightness {avg:.0f}")
+if avg >= 120:
+    sys.exit(1)
+call("ob-menu/debug", {"op": "close"})
 EOF
 STATUS=$?
 

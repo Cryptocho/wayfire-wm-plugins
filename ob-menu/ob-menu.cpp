@@ -197,11 +197,12 @@ class wayfire_ob_menu : public wf::plugin_interface_t
     void init() override
     {
         auto &state = MenuState::get();
+        wf::option_wrapper_t<std::string> theme_name{"ob-menu/theme_name"};
         wf::option_wrapper_t<std::string> menu_file{"ob-menu/menu_file"};
         wf::option_wrapper_t<std::string> font{"ob-menu/font"};
         wf::option_wrapper_t<std::string> font_mi{"ob-menu/font_menuitem"};
         wf::option_wrapper_t<std::string> font_mh{"ob-menu/font_menuheader"};
-        state.init(menu_file, font, font_mi, font_mh);
+        state.init(theme_name, menu_file, font, font_mi, font_mh);
         LOGI("ob-menu init: ", state.set.menus.size(), " menus parsed");
 
         outputs.init_output_tracking();
