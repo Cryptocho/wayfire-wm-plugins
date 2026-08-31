@@ -119,6 +119,18 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /* Local xkb state mirror: wlroots does NOT update the server-side
+     * xkb state from key events (update_state=false in
+     * virtual_keyboard_key); the protocol requires the client to report
+     * modifier state via the modifiers request. We track it locally and
+     * serialize after every key. */
+    struct xkb_state *xs = xkb_state_new(km);
+    if (!xs)
+    {
+        fprintf(stderr, "vinput: xkb_state failed\n");
+        return 1;
+    }
+
     const char *text = xkb_keymap_get_as_string(km,
         XKB_KEYMAP_FORMAT_TEXT_V1);
     size_t len = strlen(text) + 1;
@@ -132,7 +144,6 @@ int main(int argc, char **argv)
     long klen = ftell(f);
     zwp_virtual_keyboard_v1_keymap(kbd, 1 /* XKB_V1 */, fileno(f),
         (uint32_t)klen);
-    xkb_keymap_unref(km);
     xkb_context_unref(ctx);
 
     for (int i = 2; i < argc;)
@@ -165,10 +176,20 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "key") && (i + 2 < argc))
         {
-            /* wl_keyboard keycodes are evdev + 8 */
-            zwp_virtual_keyboard_v1_key(kbd, g_time,
-                (uint32_t)strtoul(argv[i + 1], NULL, 0) + 8,
-                (uint32_t)atoi(argv[i + 2]));
+            uint32_t evdev = (uint32_t)strtoul(argv[i + 1], NULL, 0);
+            uint32_t st    = (uint32_t)atoi(argv[i + 2]);
+            /* wlr_keyboard_key_event.keycode is the evdev code; wlroots
+             * applies the xkb +8 internally, so pass the raw code */
+            zwp_virtual_keyboard_v1_key(kbd, g_time, evdev, st);
+            /* mirror the key in our local xkb state and report the new
+             * modifier mask (the server never derives it from keys) */
+            xkb_state_update_key(xs, evdev + 8,
+                st ? XKB_KEY_DOWN : XKB_KEY_UP);
+            zwp_virtual_keyboard_v1_modifiers(kbd,
+                xkb_state_serialize_mods(xs, XKB_STATE_MODS_DEPRESSED),
+                xkb_state_serialize_mods(xs, XKB_STATE_MODS_LATCHED),
+                xkb_state_serialize_mods(xs, XKB_STATE_MODS_LOCKED),
+                xkb_state_serialize_layout(xs, XKB_STATE_LAYOUT_EFFECTIVE));
             i += 3;
         }
         else
@@ -189,6 +210,8 @@ int main(int argc, char **argv)
 
     zwlr_virtual_pointer_v1_destroy(ptr);
     zwp_virtual_keyboard_v1_destroy(kbd);
+    xkb_state_unref(xs);
+    xkb_keymap_unref(km);
     wl_display_flush(dpy);
     wl_display_disconnect(dpy);
     return 0;

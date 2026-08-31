@@ -25,7 +25,11 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
   public:
     void init() override
     {
-        output->add_key(key_root, &on_key_root);
+        output->add_activator(key_root, &on_key_root);
+        output->add_activator(key_client, &on_key_client);
+        LOGI("ob-menu: key_root = ",
+            wf::option_type::to_string(key_root.value()),
+            ", key_client = ", wf::option_type::to_string(key_client.value()));
 
         /* xdg toplevels asking for a window menu (show_window_menu) */
         output->connect(&on_show_window_menu);
@@ -165,15 +169,19 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
     };
 
   private:
-    wf::option_wrapper_t<wf::keybinding_t> key_root{"ob-menu/key_root_menu"};
-    wf::option_wrapper_t<wf::keybinding_t> key_client{"ob-menu/key_client_menu"};
-    wf::key_callback on_key_root = [=] (auto)
+    /* activator bindings (command-plugin style). add_key's keybinding
+     * matching silently failed for alt-modified bindings in this
+     * environment while the activator path works; activators are also
+     * the canonical wayfire binding mechanism. */
+    wf::option_wrapper_t<wf::activatorbinding_t> key_root{"ob-menu/key_root_menu"};
+    wf::option_wrapper_t<wf::activatorbinding_t> key_client{"ob-menu/key_client_menu"};
+    wf::activator_callback on_key_root = [=] (auto)
     {
         LOGI("ob-menu: key_root_menu triggered (root-menu)");
         open_menu_at("root-menu", output->get_cursor_position());
         return true;
     };
-    wf::key_callback on_key_client = [=] (auto)
+    wf::activator_callback on_key_client = [=] (auto)
     {
         LOGI("ob-menu: key_client_menu binding fired");
         open_client_at_titlebar();

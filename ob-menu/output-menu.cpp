@@ -588,8 +588,10 @@ void OutputMenu::handle_keyboard_key(wf::seat_t*, wlr_keyboard_key_event event)
         return;
     }
 
-    /* xkb keycodes are evdev codes + 8 */
-    const int ev = (int)event.keycode - 8;
+    /* wlr_keyboard_key_event.keycode is already the evdev code (wayfire's
+     * own binding matching uses it as-is); the +8 xkb offset only applies
+     * to xkb_state_update_key, not here */
+    const int ev = (int)event.keycode;
     static const std::pair<int, const char*> keys[] = {
         {KEY_UP, "up"}, {KEY_DOWN, "down"},
         {KEY_LEFT, "left"}, {KEY_RIGHT, "right"},

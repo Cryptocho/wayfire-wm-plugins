@@ -153,8 +153,11 @@ if st.get("open"):
     vinput("key", "106", "1", "key", "106", "0")  # RIGHT
     ok = poll(lambda: state().get("levels") == 2)
     check("real keyboard RIGHT opens submenu", ok, str(state()))
-    vinput("key", "1", "1", "key", "1", "0")  # Esc
-    check("real Esc closed the tree", not state().get("open"), str(state()))
+    vinput("key", "1", "1", "key", "1", "0")  # Esc: close the submenu level
+    ok = poll(lambda: state().get("levels") == 1)
+    vinput("key", "1", "1", "key", "1", "0")  # Esc again: close the tree
+    check("real Esc closes level then tree",
+          ok and not state().get("open"), str(state()))
 else:
     skip("keyboard open/nav/escape via vinput",
         "synthetic key events do not trigger keybindings headless")
