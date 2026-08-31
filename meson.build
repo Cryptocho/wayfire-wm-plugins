@@ -72,3 +72,6 @@ executable('vinput', ['tools/vinput.c', vinput_proto_c, vinput_proto_h],
 
 # M3: ob-menu plugin.
 subdir('ob-menu')
+
+# P3: layout-manager (global layout mode switching).
+subdir('layout-manager')

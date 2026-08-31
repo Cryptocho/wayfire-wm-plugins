@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="layout-manager">
+		<_short>Layout Manager</_short>
+		<_long>Global layout mode switching: sway-style H/V tiling &lt;-&gt; stacking (native floating), with per-view float. Runtime switching via keybinding and IPC.</_long>
+		<category>Window Management</category>
+		<option name="default_mode" type="string">
+			<_short>Default layout mode</_short>
+			<_long>Layout mode at plugin load: "stacking" (native floating) or "tiling".</_long>
+			<default>stacking</default>
+		</option>
+		<option name="default_orientation" type="string">
+			<_short>Default tiling orientation</_short>
+			<_long>Split direction of each workspace's tiling root: "auto" (vertical root when the workarea is taller than wide, horizontal otherwise — sway semantics), "h" or "v".</_long>
+			<default>auto</default>
+		</option>
+		<option name="gaps_inner" type="int">
+			<_short>Inner gap (per side)</_short>
+			<_long>Gaps between tiled views, per side: the visual gap between two neighbors is 2x this value. Only applies in tiling mode.</_long>
+			<default>4</default>
+			<min>0</min>
+			<max>200</max>
+		</option>
+		<option name="gaps_outer" type="int">
+			<_short>Outer gap</_short>
+			<_long>Gap between the tiled views and the edges of the workarea. Only applies in tiling mode.</_long>
+			<default>8</default>
+			<min>0</min>
+			<max>200</max>
+		</option>
+		<option name="key_toggle_mode" type="activator">
+			<_short>Toggle layout mode</_short>
+			<_long>Toggles the global layout mode between tiling and stacking.</_long>
+			<default>&lt;super&gt;&lt;shift&gt; KEY_T</default>
+		</option>
+		<option name="key_toggle_float" type="activator">
+			<_short>Toggle float (focused view)</_short>
+			<_long>Floats/unfloats the focused view within tiling mode (sway floating toggle).</_long>
+			<default>&lt;super&gt;&lt;shift&gt; KEY_SPACE</default>
+		</option>
+		<option name="key_split_horizontal" type="activator">
+			<_short>Split horizontal</_short>
+			<_long>Wraps the focused tiling view in a horizontal split (new views inserted there are laid out side by side).</_long>
+			<default>&lt;super&gt; KEY_B</default>
+		</option>
+		<option name="key_split_vertical" type="activator">
+			<_short>Split vertical</_short>
+			<_long>Wraps the focused tiling view in a vertical split.</_long>
+			<default>&lt;super&gt; KEY_V</default>
+		</option>
+		<option name="key_focus_left" type="activator">
+			<_short>Focus left</_short>
+			<_long>Moves keyboard focus to the tiled view on the left. Unbound by default.</_long>
+			<default></default>
+		</option>
+		<option name="key_focus_right" type="activator">
+			<_short>Focus right</_short>
+			<_long>Moves keyboard focus to the tiled view on the right. Unbound by default.</_long>
+			<default></default>
+		</option>
+		<option name="key_focus_above" type="activator">
+			<_short>Focus above</_short>
+			<_long>Moves keyboard focus to the tiled view above. Unbound by default.</_long>
+			<default></default>
+		</option>
+		<option name="key_focus_below" type="activator">
+			<_short>Focus below</_short>
+			<_long>Moves keyboard focus to the tiled view below. Unbound by default.</_long>
+			<default></default>
+		</option>
+		<option name="float_by_default" type="string">
+			<_short>Auto-float views matching</_short>
+			<_long>View matcher expression; matching views are never tiled and open floating (e.g. "type=dialog"). Empty = no auto-float rules.</_long>
+			<default></default>
+		</option>
+	</plugin>
+</wayfire>
