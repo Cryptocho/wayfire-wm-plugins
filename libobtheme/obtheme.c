@@ -180,6 +180,11 @@ int ob_theme_init(struct theme **out, struct ob_theme_config cfg)
 	return 0;
 }
 
+struct theme *ob_theme_current(void)
+{
+	return rc.theme;
+}
+
 void ob_theme_finish(struct theme *theme)
 {
 	if (!theme) {

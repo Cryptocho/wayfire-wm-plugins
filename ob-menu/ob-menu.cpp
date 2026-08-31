@@ -169,11 +169,13 @@ class ob_menu_output_t : public wf::per_output_plugin_instance_t
     wf::option_wrapper_t<wf::keybinding_t> key_client{"ob-menu/key_client_menu"};
     wf::key_callback on_key_root = [=] (auto)
     {
+        LOGI("ob-menu: key_root_menu triggered (root-menu)");
         open_menu_at("root-menu", output->get_cursor_position());
         return true;
     };
     wf::key_callback on_key_client = [=] (auto)
     {
+        LOGI("ob-menu: key_client_menu binding fired");
         open_client_at_titlebar();
         return true;
     };

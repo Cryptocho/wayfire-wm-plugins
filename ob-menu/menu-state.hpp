@@ -29,12 +29,21 @@ struct MenuState
             return;
         }
 
-        struct ob_theme_config cfg = {};
-        cfg.theme_name      = "";
-        cfg.font            = font.c_str();
-        cfg.font_menuitem   = font_menuitem.c_str();
-        cfg.font_menuheader = font_menuheader.c_str();
-        ob_theme_init(&ob, cfg);
+        /* The vendored theme engine keeps colors/layouts in ONE global rc
+         * shim: only a single theme instance may exist per process. If
+         * ob-decor (or any ob_* consumer) already initialized one, reuse
+         * it — menu colors then come from the same themerc (e.g. the
+         * active-item highlight color). */
+        ob = ob_theme_current();
+        if (!ob)
+        {
+            struct ob_theme_config cfg = {};
+            cfg.theme_name      = "";
+            cfg.font            = font.c_str();
+            cfg.font_menuitem   = font_menuitem.c_str();
+            cfg.font_menuheader = font_menuheader.c_str();
+            ob_theme_init(&ob, cfg);
+        }
 
         /* expand leading ~/ */
         std::string menu_file = menu_file_opt;

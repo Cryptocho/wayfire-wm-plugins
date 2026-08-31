@@ -43,8 +43,17 @@ struct ob_theme_config {
 	int corner_radius; /* <=0 = square corners */
 };
 
-/* Initialize `rc` shims + parse the theme. Returns 0 on success. */
+/* Initialize `rc` shims + parse the theme. Returns 0 on success.
+ * NOTE: the vendored theme code reads colors/layouts from the GLOBAL rc
+ * shim, so only ONE theme instance may exist per process. Later callers
+ * that only need menu/dimension accessors should reuse ob_theme_current()
+ * instead of initializing a second theme (a second init repoints rc.theme
+ * and crashes the first consumer's hover rendering). */
 int ob_theme_init(struct theme **out, struct ob_theme_config cfg);
+
+/* The most recently initialized theme (NULL before the first init).
+ * Borrowed pointer; shared between ob-decor and ob-menu. */
+struct theme *ob_theme_current(void);
 
 /* Free all theme resources (labwc theme_finish + rc strings). */
 void ob_theme_finish(struct theme *theme);
