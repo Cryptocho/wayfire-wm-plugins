@@ -255,6 +255,10 @@ static inline enum lab_justification ob_theme_menu_title_justify(
 /* Height (px) of the font for the given place (OB_FONT_*). */
 int ob_theme_font_height(int place);
 
+/* Pango font description string for the given place, e.g. "sans 10".
+ * Static buffer, valid until the next call. */
+const char *ob_theme_font_string(int place);
+
 /* ---- button rendering ---- */
 
 /* State bits (subset of labwc's LAB_BS_*; see include/theme.h). */

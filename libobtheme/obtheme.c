@@ -211,6 +211,27 @@ int ob_theme_font_height(int place)
 	return font_height(font);
 }
 
+const char *ob_theme_font_string(int place)
+{
+	static char buf[128];
+	struct font *font = &rc.font_menuitem;
+	if (place == OB_FONT_MENUHEADER)
+	{
+		font = &rc.font_menuheader;
+	}
+	else if (place == OB_FONT_TITLEBAR)
+	{
+		font = &rc.font_activewindow;
+	}
+
+	snprintf(buf, sizeof(buf), "%s %s%s%d",
+		font->name ? font->name : "sans",
+		font->slant == PANGO_STYLE_ITALIC ? "italic " : "",
+		font->weight >= PANGO_WEIGHT_BOLD ? "bold " : "",
+		font->size > 0 ? font->size : 10);
+	return buf;
+}
+
 int ob_theme_title_buttons(const struct theme *t, int side,
 	enum lab_node_type *out, int max)
 {

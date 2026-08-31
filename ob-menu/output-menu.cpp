@@ -211,12 +211,31 @@ OutputMenu::~OutputMenu()
     close_all(false);
 }
 
+/* Row height of one menu entry (labwc menu_create_scene semantics):
+ * plain items take the item height, plain separators just their padding
+ * + line thickness, labeled separators render as title rows. */
+static int menu_row_height(const Menu& menu, size_t idx, struct theme *ob)
+{
+    auto &item = menu.items[idx];
+    if (item->type == ItemType::Separator)
+    {
+        if (!item->text.empty())
+        {
+            return ob_theme_menu_header_height(ob);
+        }
+
+        return 2 * ob_theme_menu_separator_padding_height(ob) +
+            ob_theme_menu_separator_thickness(ob);
+    }
+
+    return ob_theme_menu_item_height(ob);
+}
+
 void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
 {
     auto &theme = MenuState::get();
     const int b  = ob_theme_menu_border_width(theme.ob);
     const int px = ob_theme_menu_items_padding_x(theme.ob);
-    const int ih = ob_theme_menu_item_height(theme.ob);
 
     int max_w = 0;
     for (auto &item : menu->items)
@@ -237,14 +256,21 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
         w = std::min(w, menu->width_max);
     }
 
-    int h = 2 * b + (int)menu->items.size() * ih;
+    int h = 2 * b;
+    for (size_t i = 0; i < menu->items.size(); i++)
+    {
+        h += menu_row_height(*menu, i, theme.ob);
+    }
+
     level.menu = menu;
     level.box  = {pos.x, pos.y, (uint32_t)w, (uint32_t)h};
     level.item_rects.clear();
+    int y = pos.y + b;
     for (size_t i = 0; i < menu->items.size(); i++)
     {
-        level.item_rects.push_back({pos.x + b, pos.y + b + (int)i * ih,
-            (uint32_t)w, (uint32_t)ih});
+        int rh = menu_row_height(*menu, i, theme.ob);
+        level.item_rects.push_back({pos.x + b, y, (uint32_t)w, (uint32_t)rh});
+        y += rh;
     }
 
     level.selected = -1;
@@ -363,7 +389,7 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
     auto &state = MenuState::get();
     const int b = ob_theme_menu_border_width(state.ob);
     const int px = ob_theme_menu_items_padding_x(state.ob);
-    const std::string font = "sans 10"; /* M3: ob-decor font passthrough */
+    const std::string font = ob_theme_font_string(OB_FONT_MENUITEM);
 
     for (auto &level : stack)
     {
@@ -376,7 +402,50 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
         {
             auto &item  = level.menu->items[i];
             auto &irect = level.item_rects[i];
-            if ((item->type == ItemType::Separator) || item->text.empty())
+
+            if (item->type == ItemType::Separator)
+            {
+                if (item->text.empty())
+                {
+                    /* labwc: horizontal line, centered, inset by the
+                     * horizontal padding */
+                    const float *sc = ob_theme_menu_separator_color(state.ob);
+                    const int py = ob_theme_menu_separator_padding_height(
+                        state.ob);
+                    const int th = ob_theme_menu_separator_thickness(state.ob);
+                    const int pw = ob_theme_menu_separator_padding_width(
+                        state.ob);
+                    wf::geometry_t line{irect.x + px + pw,
+                        irect.y + py, (uint32_t)std::max(0,
+                        (int)irect.width - 2 * (px + pw)), (uint32_t)th};
+                    data.pass->add_rect(
+                        wf::color_t(sc[0], sc[1], sc[2], sc[3]),
+                        data.target, line, data.damage);
+                } else
+                {
+                    /* labeled separator = title row: title bg + centered
+                     * text in the title color (labwc menu.title.*) */
+                    const float *bg = ob_theme_menu_title_bg(state.ob);
+                    const float *fg = ob_theme_menu_title_text(state.ob);
+                    data.pass->add_rect(
+                        wf::color_t(bg[0], bg[1], bg[2], bg[3]),
+                        data.target, irect, data.damage);
+                    wf::geometry_t text_rect{irect.x + px, irect.y,
+                        irect.width - 2 * px, irect.height};
+                    auto surface = render_menu_text(item->text,
+                        text_rect.width, text_rect.height,
+                        ob_theme_font_string(OB_FONT_MENUHEADER), fg,
+                        LAB_JUSTIFY_CENTER);
+                    wf::owned_texture_t tex{surface};
+                    cairo_surface_destroy(surface);
+                    data.pass->add_texture(tex.get_texture(), data.target,
+                        text_rect, data.damage);
+                }
+
+                continue;
+            }
+
+            if (item->text.empty())
             {
                 continue;
             }
@@ -798,7 +867,6 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
 
     /* measure child size */
     const int px = ob_theme_menu_items_padding_x(state.ob);
-    const int ih = ob_theme_menu_item_height(state.ob);
     int max_w = 0;
     for (auto &it : item->submenu->items)
     {
@@ -816,7 +884,11 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
         w = std::min(w, item->submenu->width_max);
     }
 
-    int h = 2 * b + (int)item->submenu->items.size() * ih;
+    int h = 2 * b;
+    for (size_t i = 0; i < item->submenu->items.size(); i++)
+    {
+        h += menu_row_height(*item->submenu, i, state.ob);
+    }
     const auto &anchor_rect = parent.item_rects[
         parent.selected >= 0 ? parent.selected : 0];
     const auto &outg = output->get_layout_geometry();
