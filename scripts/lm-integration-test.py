@@ -137,6 +137,44 @@ if len(ids) == 3:
     check("divider drag works with decorations (right -~40)",
           abs((w1b - w1a) - 40) <= 2, f"{w1b}->{w1a}")
 
+# --- sway edge-resize: dragging a window's frame edge ----------------------
+# leaf0 right edge (wm box): press INSIDE the window's border strip; the
+# neighbor must give/take space (sway semantics)
+ids = []
+leaves(call("layout-manager/get-layout").get("layout", {}), ids)
+if len(ids) >= 2:
+    g0 = ids[0]["geometry"]
+    rx = g0["x"] + g0["width"] - 3   # inside the right border strip
+    drag(["move", "-5000", "-5000", "move", str(rx), "360",
+          "button", "0x110", "1",
+          "move", "20", "0", "move", "20", "0",
+          "button", "0x110", "0"])
+    time.sleep(0.4)
+    ids = []
+    leaves(call("layout-manager/get-layout").get("layout", {}), ids)
+    w0e = ids[0]["geometry"]["width"]
+    check("edge drag widens the window (~+40)", abs((w0e - w0a) - 40) <= 2,
+          f"{w0a}->{w0e}")
+    w1e = ids[1]["geometry"]["width"]
+    check("neighbor shrinks when edge-dragged (~-40)",
+          abs((w1a - w1e) - 40) <= 2, f"{w1a}->{w1e}")
+
+    # left edge of the second window: dragging it LEFT widens that window
+    g1 = ids[1]["geometry"]
+    lx = g1["x"] + 3
+    drag(["move", "-5000", "-5000", "move", str(lx), "360",
+          "button", "0x110", "1",
+          "move", "-20", "0", "move", "-20", "0",
+          "button", "0x110", "0"])
+    time.sleep(0.4)
+    ids = []
+    leaves(call("layout-manager/get-layout").get("layout", {}), ids)
+    w1f = ids[1]["geometry"]["width"]
+    check("left-edge drag leftwards widens the window (~+40)",
+          abs((w1f - w1e) - 40) <= 2, f"{w1e}->{w1f}")
+else:
+    check("edge drag skipped (no leaves)", False, "")
+
 # --- outer gap right-click opens the ob-menu root menu --------------------
 # left outer gap: x in [0,4) is bare desktop (frame starts at x=4); y=360
 # is mid-screen (the top strip is titlebar, which would be a client menu)

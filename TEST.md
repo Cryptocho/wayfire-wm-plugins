@@ -1,67 +1,84 @@
 # TEST.md — 交互测试指南
 
-## P1:ob-decor(openbox 主题装饰)— 待用户执行
+*最新的排在最上面;越往下越旧(已通过的阶段沉底)。*
 
-自动化已全绿:obtheme 解析断言(OB-Arc-Dark + 渐变夹具 + 默认主题)、headless 冒烟。
-以下是剩余的交互/视觉验证。
+## P3:layout-manager(全局布局模式:sway H/V tiling ↔ stacking)— 待用户执行
 
 ### 启动嵌套测试会话
 
 ```bash
 cd ~/workspace/wm/wayfire-wm-plugins
-WAYFIRE_PLUGIN_PATH=$PWD/build/ob-decor \
+WAYFIRE_PLUGIN_PATH=$PWD/build/layout-manager:$PWD/build/ob-decor:$PWD/build/ob-menu \
 WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
-WLR_BACKENDS=wayland \
-wayfire -c test/wayfire-decor.ini -d
+WLR_BACKENDS=wayland wayfire -c test/wayfire-layout-interactive.ini -d
 ```
+(嵌套窗口里开几个 kitty:`<super>T` 或终端输入 kitty;`<super>1..4` 切工作区)
 
-会弹出 1280×720 嵌套窗口。`<super>T` 开 kitty(主桌面未占用的键)。
-
-### D1 主题装饰外观(OB-Arc-Dark)
-
-| 步骤 | 操作 | 预期 |
-|---|---|---|
-| 1 | 开 kitty | 深色标题栏(#2F343F),标题居中浅灰蓝(#B5BCC9),外围 2px 紫色 ring |
-| 2 | 观察右上按钮 | iconify(−)、maximize(□)、close(**红色圆**)——均为主题 xbm 图片 |
-| 3 | 观察左上 | menu 按钮(↖);点击无动作(惰性,P2 接菜单) |
-| 4 | 点击另一个窗口使 kitty 失焦 | 标题文字变暗(#7F8898),ring 变深色(#2a323b) |
-| 5 | 重新聚焦 kitty | 标题变亮、ring 变紫(active 态) |
-
-### D2 按钮动作
+### L-1 模式切换(收编/恢复)
 
 | 步骤 | 操作 | 预期 |
 |---|---|---|
-| 1 | 双击标题栏 | 切换最大化(再双击还原) |
-| 2 | 点击 maximize 按钮 | 同上;最大化后无边框(ring 也消失),还原后恢复 |
-| 3 | 点击 iconify | 最小化(<super>TAB fast-switcher 可试;还原即可) |
-| 4 | 点击 close | 窗口关闭 |
-| 5 | hover 各按钮 | 图标变亮(hover 色 #B5BCC9 / close #D7787D) |
+| 1 | 浮动摆放 3-4 个窗口(大小位置各异) | 原生浮动,可自由拖动 |
+| 2 | `<super>+Shift+T` | 所有窗口瞬间收编:等宽并排(外缘 8px、窗口间 8px 缝隙),行主序(上→下、左→右) |
+| 3 | 再按 `<super>+Shift+T` | 每个窗口**恢复到收编前的位置和大小** |
+| 4 | 反复切换 3-4 次 | 无闪烁残留、无 crash、浮动窗(见 L-4)位置不动 |
 
-### D3 resize/move 拖动(前置:会话需在配置含 move/resize 后启动)
-
-> 配置已含 `move resize`(装饰手势的执行者:decor 节点检测手势→发请求信号→
-> move/resize 插件执行)。若你改过配置,请**重启嵌套会话**再测。
+### L-2 tiling 下的窗口生命周期
 
 | 步骤 | 操作 | 预期 |
 |---|---|---|
-| 1 | 拖动窗口边缘(ring+边框区域) | 正常 resize,光标变对应箭头 |
-| 2 | 拖动标题栏 | 移动窗口 |
+| 1 | tiling 模式,开新窗口 | 插到**当前焦点窗口右侧**(同层兄弟),焦点给新窗口 |
+| 2 | 关闭中间一个窗口 | 左右两侧平分腾出的空间,其余不动 |
+| 3 | 最小化一个窗口 | 立即让出空间;还原后重新进树(插在最后焦点处) |
+| 4 | `<super>F1` / `<super>F2`(嵌套会话已配 vswitch;root menu 键在嵌套配置中让位为 `<super>F3`) | ws1/ws2 各有独立树;互不影响 |
+| 5 | 移动窗口到另一工作区(client-menu 或 move) | 目标工作区树里正确排列 |
 
-### D4 主题切换与默认主题
+### L-3 resize:拖窗口边框(主)+ 分割线缝隙(两种都支持)
 
-```bash
-# 嵌套会话运行中,编辑 test/wayfire-decor.ini: theme = (置空)
-```
 | 步骤 | 操作 | 预期 |
 |---|---|---|
-| 1 | 置空 theme 保存 | 无变化(热重载未接,重启生效) |
-| 2 | 重启嵌套会话(theme 空) | labwc 内置默认装饰(细边框),不崩溃 |
+| 1 | 按住某窗口**右侧边框**向右拖 | 该窗口变宽,**右侧邻居相应变窄**(sway 语义:窗口缩放联动邻接窗口) |
+| 2 | 按住某窗口**左边框**向左拖 | 该窗口变宽,左侧邻居变窄 |
+| 3 | 上下边框同理(竖排 split 时) | 高度联动 |
+| 4 | 两窗口之间的缝隙(约 8px 带,±4px 容差)按下拖动 | 同样调整两侧(与边框拖拽等效) |
+| 5 | 拖到极限(≤100px 宽/≤60px 高) | 钳住不缩,不崩 |
+| 6 | 在窗口**内部**(非边框区)按住左键拖动 | 不改变布局 |
+| 7 | 最左窗口的左边框 / 最右窗口的右边框 | 无法再拖(外侧无边;原生行为即无响应) |
 
-### D5 已知未实现(勿报 bug)
+### L-4 per-view float(super+Shift+Space)
 
-- pressed 按下瞬间的专属颜色、maximize 的 toggled 态图标(主题里有,解析未接,T5+ 补)
-- shade/desk/menu 按钮动作(P2+)
-- 高分屏 scale>1 未验证
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | tiling 模式,焦点在某窗口,`<super>+Shift+Space` | 该窗口浮出:约 50%×75% 居中,可自由移动/缩放(原生行为),浮在平铺窗口之上 |
+| 2 | 再按 `<super>+Shift+Space` | 回到树里(插在最后焦点位置),尺寸与相邻窗口协调 |
+| 3 | 再浮出 | **恢复上一次浮动的位置和大小**(几何记忆) |
+| 4 | 浮动状态下切换模式/切换工作区 | 浮动窗位置不动、状态保持 |
+| 5 | 浮动窗移到 ws2 | 在 ws2 仍是浮动(z 序在平铺窗之上) |
+
+### L-5 split h/v(手动分割)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 焦点在某平铺窗口,`<super>V` | 无可见变化(包了一层竖排 split) |
+| 2 | 开新窗口 | 新窗口出现在焦点窗口**下方**(竖排堆叠),而不是右侧 |
+| 3 | `<super>B` 后再开窗口 | 回到左右并排方向 |
+| 4 | 新窗口开在别的焦点上 | 不受之前 split 影响(仅对执行 split 时的焦点窗口生效) |
+
+### L-6 右键与全屏
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | tiling 模式,右键**外圈缝隙**(窗口与屏幕边缘之间的桌面) | root menu 弹出 |
+| 2 | 右键窗口标题栏 | client menu(原有行为) |
+| 3 | client-menu → Fullscreen / 或窗口自身请求全屏 | 占满整屏(含缝隙);新窗口进来时全屏退出 |
+| 4 | 全屏下拖拽分割线 | 不响应(全屏期间禁用) |
+
+### 已知未实现(勿报 bug)
+
+- 键盘焦点移动绑定(key_focus_*)默认未设,ini 配置后可用
+- set-layout(任意树重构 IPC)、tabbed/stacked 布局 → P4
+- scrolling 自由平移 → P5
+- 拖拽窗口重排(交换位置)→ P4;scale>1 未验证
 
 ---
 
@@ -143,82 +160,72 @@ wayfire -c test/wayfire-menu-interactive.ini -d
 
 ---
 
-## P0:proto-pan(已全部通过,2026-08-30)
+## P1:ob-decor(openbox 主题装饰)— 待用户执行
 
-启动:`WAYFIRE_PLUGIN_PATH=$PWD/build/proto-pan WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata WLR_BACKENDS=wayland wayfire -c test/wayfire.ini -d`
-键盘 <super>F1/F2 步进、触摸板三指滑动自由平移、IPC `proto-pan/step|drag|get-state`。结论:全部通过,GO。
-
-## P3:layout-manager(全局布局模式:sway H/V tiling ↔ stacking)— 待用户执行
+自动化已全绿:obtheme 解析断言(OB-Arc-Dark + 渐变夹具 + 默认主题)、headless 冒烟。
+以下是剩余的交互/视觉验证。
 
 ### 启动嵌套测试会话
 
 ```bash
 cd ~/workspace/wm/wayfire-wm-plugins
-WAYFIRE_PLUGIN_PATH=$PWD/build/layout-manager:$PWD/build/ob-decor:$PWD/build/ob-menu \
+WAYFIRE_PLUGIN_PATH=$PWD/build/ob-decor \
 WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
-WLR_BACKENDS=wayland wayfire -c test/wayfire-layout-interactive.ini -d
+WLR_BACKENDS=wayland \
+wayfire -c test/wayfire-decor.ini -d
 ```
-(嵌套窗口里开几个 kitty:`<super>T` 或终端输入 kitty;`<super>1..4` 切工作区)
 
-### L-1 模式切换(收编/恢复)
+会弹出 1280×720 嵌套窗口。`<super>T` 开 kitty(主桌面未占用的键)。
 
-| 步骤 | 操作 | 预期 |
-|---|---|---|
-| 1 | 浮动摆放 3-4 个窗口(大小位置各异) | 原生浮动,可自由拖动 |
-| 2 | `<super>+Shift+T` | 所有窗口瞬间收编:等宽并排(外缘 8px、窗口间 8px 缝隙),行主序(上→下、左→右) |
-| 3 | 再按 `<super>+Shift+T` | 每个窗口**恢复到收编前的位置和大小** |
-| 4 | 反复切换 3-4 次 | 无闪烁残留、无 crash、浮动窗(见 L-4)位置不动 |
-
-### L-2 tiling 下的窗口生命周期
+### D1 主题装饰外观(OB-Arc-Dark)
 
 | 步骤 | 操作 | 预期 |
 |---|---|---|
-| 1 | tiling 模式,开新窗口 | 插到**当前焦点窗口右侧**(同层兄弟),焦点给新窗口 |
-| 2 | 关闭中间一个窗口 | 左右两侧平分腾出的空间,其余不动 |
-| 3 | 最小化一个窗口 | 立即让出空间;还原后重新进树(插在最后焦点处) |
-| 4 | `<super>2` 切到空工作区再开窗口 | ws2 有自己独立的树;ws1 布局不受影响 |
-| 5 | 移动窗口到另一工作区(client-menu 或 move) | 目标工作区树里正确排列 |
+| 1 | 开 kitty | 深色标题栏(#2F343F),标题居中浅灰蓝(#B5BCC9),外围 2px 紫色 ring |
+| 2 | 观察右上按钮 | iconify(−)、maximize(□)、close(**红色圆**)——均为主题 xbm 图片 |
+| 3 | 观察左上 | menu 按钮(↖);点击无动作(惰性,P2 接菜单) |
+| 4 | 点击另一个窗口使 kitty 失焦 | 标题文字变暗(#7F8898),ring 变深色(#2a323b) |
+| 5 | 重新聚焦 kitty | 标题变亮、ring 变紫(active 态) |
 
-### L-3 分割线拖拽 resize
-
-| 步骤 | 操作 | 预期 |
-|---|---|---|
-| 1 | 光标移到两窗口之间的缝隙(约 8px 带,±4px 容差) | 按下左键拖动:两侧窗口实时跟随 |
-| 2 | 松手 | 布局保持 |
-| 3 | 拖到极限(一个窗口 ≤100px 宽/≤60px 高) | 被钳住不再缩小,不崩 |
-| 4 | 在窗口**内部**按住左键拖动 | 不改变布局(没有分割线的地方不响应) |
-
-### L-4 per-view float(super+Shift+Space)
+### D2 按钮动作
 
 | 步骤 | 操作 | 预期 |
 |---|---|---|
-| 1 | tiling 模式,焦点在某窗口,`<super>+Shift+Space` | 该窗口浮出:约 50%×75% 居中,可自由移动/缩放(原生行为),浮在平铺窗口之上 |
-| 2 | 再按 `<super>+Shift+Space` | 回到树里(插在最后焦点位置),尺寸与相邻窗口协调 |
-| 3 | 再浮出 | **恢复上一次浮动的位置和大小**(几何记忆) |
-| 4 | 浮动状态下切换模式/切换工作区 | 浮动窗位置不动、状态保持 |
-| 5 | 浮动窗移到 ws2 | 在 ws2 仍是浮动(z 序在平铺窗之上) |
+| 1 | 双击标题栏 | 切换最大化(再双击还原) |
+| 2 | 点击 maximize 按钮 | 同上;最大化后无边框(ring 也消失),还原后恢复 |
+| 3 | 点击 iconify | 最小化(<super>TAB fast-switcher 可试;还原即可) |
+| 4 | 点击 close | 窗口关闭 |
+| 5 | hover 各按钮 | 图标变亮(hover 色 #B5BCC9 / close #D7787D) |
 
-### L-5 split h/v(手动分割)
+### D3 resize/move 拖动(前置:会话需在配置含 move/resize 后启动)
 
-| 步骤 | 操作 | 预期 |
-|---|---|---|
-| 1 | 焦点在某平铺窗口,`<super>V` | 无可见变化(包了一层竖排 split) |
-| 2 | 开新窗口 | 新窗口出现在焦点窗口**下方**(竖排堆叠),而不是右侧 |
-| 3 | `<super>B` 后再开窗口 | 回到左右并排方向 |
-| 4 | 新窗口开在别的焦点上 | 不受之前 split 影响(仅对执行 split 时的焦点窗口生效) |
-
-### L-6 右键与全屏
+> 配置已含 `move resize`(装饰手势的执行者:decor 节点检测手势→发请求信号→
+> move/resize 插件执行)。若你改过配置,请**重启嵌套会话**再测。
 
 | 步骤 | 操作 | 预期 |
 |---|---|---|
-| 1 | tiling 模式,右键**外圈缝隙**(窗口与屏幕边缘之间的桌面) | root menu 弹出 |
-| 2 | 右键窗口标题栏 | client menu(原有行为) |
-| 3 | client-menu → Fullscreen / 或窗口自身请求全屏 | 占满整屏(含缝隙);新窗口进来时全屏退出 |
-| 4 | 全屏下拖拽分割线 | 不响应(全屏期间禁用) |
+| 1 | 拖动窗口边缘(ring+边框区域) | 正常 resize,光标变对应箭头 |
+| 2 | 拖动标题栏 | 移动窗口 |
 
-### 已知未实现(勿报 bug)
+### D4 主题切换与默认主题
 
-- 键盘焦点移动绑定(key_focus_*)默认未设,ini 配置后可用
-- set-layout(任意树重构 IPC)、tabbed/stacked 布局 → P4
-- scrolling 自由平移 → P5
-- 拖拽窗口重排(交换位置)→ P4;scale>1 未验证
+```bash
+# 嵌套会话运行中,编辑 test/wayfire-decor.ini: theme = (置空)
+```
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 置空 theme 保存 | 无变化(热重载未接,重启生效) |
+| 2 | 重启嵌套会话(theme 空) | labwc 内置默认装饰(细边框),不崩溃 |
+
+### D5 已知未实现(勿报 bug)
+
+- pressed 按下瞬间的专属颜色、maximize 的 toggled 态图标(主题里有,解析未接,T5+ 补)
+- shade/desk/menu 按钮动作(P2+)
+- 高分屏 scale>1 未验证
+
+---
+
+## P0:proto-pan(已全部通过,2026-08-30)
+
+启动:`WAYFIRE_PLUGIN_PATH=$PWD/build/proto-pan WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata WLR_BACKENDS=wayland wayfire -c test/wayfire.ini -d`
+键盘 <super>F1/F2 步进、触摸板三指滑动自由平移、IPC `proto-pan/step|drag|get-state`。结论:全部通过,GO。

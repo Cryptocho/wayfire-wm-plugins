@@ -10,6 +10,9 @@
   <item label="Close">
     <action name="Close" />
   </item>
+  <item label="Fullscreen">
+    <action name="ToggleFullscreen" />
+  </item>
 </menu>
 
 <menu id="root-menu" label="">

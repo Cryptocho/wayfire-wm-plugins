@@ -787,7 +787,116 @@ class wayfire_layout_manager : public wf::plugin_interface_t
                 return;
             }
         }
+
+        /* Sway edge-resize: pressing on a tiled view's frame edge adjusts
+         * the boundary between that view's subtree and the adjacent one,
+         * so resizing a window makes its neighbors give/take space. */
+        auto focus = wf::toplevel_cast(wf::get_core().get_cursor_focus_view());
+        if (focus && (focus->get_output() == wo))
+        {
+            auto node = lm::view_node_t::get_node(focus);
+            if (node)
+            {
+                auto edge_band = edge_divider_band(node,
+                    wf::point_t{gc.x - og.x, gc.y - og.y});
+                if (edge_band)
+                {
+                    int axis_pos = (edge_band->direction ==
+                        lm::SPLIT_VERTICAL) ? wsetg.x : wsetg.y;
+                    inst->start_divider_drag(*edge_band, axis_pos);
+                    if (inst->divider_drag_active())
+                    {
+                        ev->mode =
+                            wf::input_event_processing_mode_t::IGNORE;
+                    }
+                }
+            }
+        }
     };
+
+    /**
+     * If the wset-local point lies on one of the leaf's frame edges
+     * (left/right/top/bottom strip), find the boundary to adjust: the
+     * nearest ancestor split with the matching axis that has a sibling on
+     * that side (sway resize semantics). The reference box is the view's
+     * target geometry (the wm box — the SSD frame lives inside it), which
+     * is inset from the raw tree-node box by the gaps.
+     */
+    static std::optional<lm::divider_band_t> edge_divider_band(
+        nonstd::observer_ptr<lm::view_node_t> node, const wf::point_t& p)
+    {
+        /* grab strips: the frame is ~4px; a bit wider is friendlier */
+        static constexpr int EDGE = 6;
+
+        const auto &g = node->target_geometry();
+        enum { LEFT, RIGHT, TOP, BOTTOM } edge;
+        bool at_left   = (p.x >= g.x) && (p.x < g.x + EDGE) &&
+            (p.y >= g.y) && (p.y < g.y + g.height);
+        bool at_right  = (p.x >= g.x + g.width - EDGE) && (p.x < g.x + g.width) &&
+            (p.y >= g.y) && (p.y < g.y + g.height);
+        bool at_top    = (p.y >= g.y) && (p.y < g.y + EDGE) &&
+            (p.x >= g.x) && (p.x < g.x + g.width);
+        bool at_bottom = (p.y >= g.y + g.height - EDGE) && (p.y < g.y + g.height) &&
+            (p.x >= g.x) && (p.x < g.x + g.width);
+
+        if (at_left)
+        {
+            edge = LEFT;
+        } else if (at_right)
+        {
+            edge = RIGHT;
+        } else if (at_top)
+        {
+            edge = TOP;
+        } else if (at_bottom)
+        {
+            edge = BOTTOM;
+        } else
+        {
+            return std::nullopt;
+        }
+
+        bool forward = (edge == RIGHT) || (edge == BOTTOM);
+        lm::split_direction_t axis = ((edge == LEFT) || (edge == RIGHT)) ?
+            lm::SPLIT_VERTICAL : lm::SPLIT_HORIZONTAL;
+
+        /* climb to the nearest ancestor split with a neighbor on that side */
+        nonstd::observer_ptr<lm::tree_node_t> cur = node;
+        while (cur && cur->parent)
+        {
+            auto parent = cur->parent;
+            if (parent->get_split_direction() == axis)
+            {
+                for (size_t i = 0; i + 1 < parent->children.size(); i++)
+                {
+                    if (parent->children[i].get() == cur.get())
+                    {
+                        if (forward)
+                        {
+                            return lm::divider_band_t{parent, (int)i,
+                                {}, axis};
+                        }
+                    }
+                }
+
+                if (!forward)
+                {
+                    for (size_t i = 1; i < parent->children.size(); i++)
+                    {
+                        if (parent->children[i].get() == cur.get())
+                        {
+                            return lm::divider_band_t{parent, (int)i - 1,
+                                {}, axis};
+                        }
+                    }
+                }
+            }
+
+            cur = parent;
+        }
+
+        return std::nullopt;
+    }
 
     /* While a divider drag is active, motion is driven directly from the
      * device-event signal (the press that started the drag was swallowed,
