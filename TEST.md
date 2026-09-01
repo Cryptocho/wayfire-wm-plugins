@@ -147,3 +147,78 @@ wayfire -c test/wayfire-menu-interactive.ini -d
 
 启动:`WAYFIRE_PLUGIN_PATH=$PWD/build/proto-pan WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata WLR_BACKENDS=wayland wayfire -c test/wayfire.ini -d`
 键盘 <super>F1/F2 步进、触摸板三指滑动自由平移、IPC `proto-pan/step|drag|get-state`。结论:全部通过,GO。
+
+## P3:layout-manager(全局布局模式:sway H/V tiling ↔ stacking)— 待用户执行
+
+### 启动嵌套测试会话
+
+```bash
+cd ~/workspace/wm/wayfire-wm-plugins
+WAYFIRE_PLUGIN_PATH=$PWD/build/layout-manager:$PWD/build/ob-decor:$PWD/build/ob-menu \
+WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
+WLR_BACKENDS=wayland wayfire -c test/wayfire-layout-interactive.ini -d
+```
+(嵌套窗口里开几个 kitty:`<super>T` 或终端输入 kitty;`<super>1..4` 切工作区)
+
+### L-1 模式切换(收编/恢复)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 浮动摆放 3-4 个窗口(大小位置各异) | 原生浮动,可自由拖动 |
+| 2 | `<super>+Shift+T` | 所有窗口瞬间收编:等宽并排(外缘 8px、窗口间 8px 缝隙),行主序(上→下、左→右) |
+| 3 | 再按 `<super>+Shift+T` | 每个窗口**恢复到收编前的位置和大小** |
+| 4 | 反复切换 3-4 次 | 无闪烁残留、无 crash、浮动窗(见 L-4)位置不动 |
+
+### L-2 tiling 下的窗口生命周期
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | tiling 模式,开新窗口 | 插到**当前焦点窗口右侧**(同层兄弟),焦点给新窗口 |
+| 2 | 关闭中间一个窗口 | 左右两侧平分腾出的空间,其余不动 |
+| 3 | 最小化一个窗口 | 立即让出空间;还原后重新进树(插在最后焦点处) |
+| 4 | `<super>2` 切到空工作区再开窗口 | ws2 有自己独立的树;ws1 布局不受影响 |
+| 5 | 移动窗口到另一工作区(client-menu 或 move) | 目标工作区树里正确排列 |
+
+### L-3 分割线拖拽 resize
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 光标移到两窗口之间的缝隙(约 8px 带,±4px 容差) | 按下左键拖动:两侧窗口实时跟随 |
+| 2 | 松手 | 布局保持 |
+| 3 | 拖到极限(一个窗口 ≤100px 宽/≤60px 高) | 被钳住不再缩小,不崩 |
+| 4 | 在窗口**内部**按住左键拖动 | 不改变布局(没有分割线的地方不响应) |
+
+### L-4 per-view float(super+Shift+Space)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | tiling 模式,焦点在某窗口,`<super>+Shift+Space` | 该窗口浮出:约 50%×75% 居中,可自由移动/缩放(原生行为),浮在平铺窗口之上 |
+| 2 | 再按 `<super>+Shift+Space` | 回到树里(插在最后焦点位置),尺寸与相邻窗口协调 |
+| 3 | 再浮出 | **恢复上一次浮动的位置和大小**(几何记忆) |
+| 4 | 浮动状态下切换模式/切换工作区 | 浮动窗位置不动、状态保持 |
+| 5 | 浮动窗移到 ws2 | 在 ws2 仍是浮动(z 序在平铺窗之上) |
+
+### L-5 split h/v(手动分割)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 焦点在某平铺窗口,`<super>V` | 无可见变化(包了一层竖排 split) |
+| 2 | 开新窗口 | 新窗口出现在焦点窗口**下方**(竖排堆叠),而不是右侧 |
+| 3 | `<super>B` 后再开窗口 | 回到左右并排方向 |
+| 4 | 新窗口开在别的焦点上 | 不受之前 split 影响(仅对执行 split 时的焦点窗口生效) |
+
+### L-6 右键与全屏
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | tiling 模式,右键**外圈缝隙**(窗口与屏幕边缘之间的桌面) | root menu 弹出 |
+| 2 | 右键窗口标题栏 | client menu(原有行为) |
+| 3 | client-menu → Fullscreen / 或窗口自身请求全屏 | 占满整屏(含缝隙);新窗口进来时全屏退出 |
+| 4 | 全屏下拖拽分割线 | 不响应(全屏期间禁用) |
+
+### 已知未实现(勿报 bug)
+
+- 键盘焦点移动绑定(key_focus_*)默认未设,ini 配置后可用
+- set-layout(任意树重构 IPC)、tabbed/stacked 布局 → P4
+- scrolling 自由平移 → P5
+- 拖拽窗口重排(交换位置)→ P4;scale>1 未验证
