@@ -40,7 +40,7 @@ for _ in $(seq 1 50); do
     [ -n "$WF_DISPLAY" ] && break
     sleep 0.1
 done
-export WF_DISPLAY
+export WF_DISPLAY REPO="$ROOT"
 
 python3 "$ROOT/scripts/lm-test.py"
 STATUS=$?
@@ -68,7 +68,7 @@ if [ $STATUS -eq 0 ]; then
         [ -n "$WF_DISPLAY" ] && break
         sleep 0.1
     done
-    export WF_DISPLAY
+    export WF_DISPLAY REPO="$ROOT"
     python3 "$ROOT/scripts/lm-test-float.py"
     STATUS=$?
 fi

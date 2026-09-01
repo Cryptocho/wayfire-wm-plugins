@@ -463,6 +463,56 @@ class lm_workspace_set_data_t : public wf::custom_data_t
     }
 
     /**
+     * Wrap the given tiled view in a new split with the given direction
+     * (sway split command): new views inserted while the view is focused
+     * stack inside the new split. If the view's parent split has only this
+     * child, the parent's direction is changed in place instead.
+     */
+    bool split_view(wayfire_toplevel_view view, lm::split_direction_t dir)
+    {
+        auto node = lm::view_node_t::get_node(view);
+        if (!node || !node->parent)
+        {
+            return false;
+        }
+
+        auto parent = node->parent;
+        {
+            autocommit_transaction_t tx;
+            if (parent->children.size() == 1)
+            {
+                parent->set_direction(dir);
+            } else
+            {
+                int index = 0;
+                for (size_t i = 0; i < parent->children.size(); i++)
+                {
+                    if (parent->children[i].get() == node.get())
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+
+                double fraction = node->fraction;
+                auto holder = std::make_unique<lm::split_node_t>(dir);
+                auto removed = parent->remove_child(node, tx.tx);
+                holder->add_child(std::move(removed), tx.tx);
+                holder->fraction = fraction;
+                parent->add_child(std::move(holder), tx.tx, index);
+            }
+
+            /* NOTE: deliberately not flatten_roots() — the single-view
+             * holder split must survive until new views join it (sway
+             * keeps the split container around as well). */
+            update_gaps_with_tx(tx.tx);
+        }
+
+        last_tiled_view = view;
+        return true;
+    }
+
+    /**
      * Consider unfullscreening all fullscreen views because a new view has been focused or attached to the
      * tiling tree.
      */

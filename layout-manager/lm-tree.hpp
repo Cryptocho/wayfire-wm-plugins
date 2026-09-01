@@ -128,6 +128,10 @@ struct split_node_t : public tree_node_t
     split_node_t(split_direction_t direction);
     split_direction_t get_split_direction() const;
 
+    /** Change the split direction in place (sway single-child split
+     *  optimization); re-arranges nothing by itself. */
+    void set_direction(split_direction_t direction);
+
   private:
     split_direction_t split_direction;
 
@@ -207,6 +211,29 @@ bool flatten_tree(std::unique_ptr<tree_node_t>& root);
  * Get the root of the tree which node is part of
  */
 nonstd::observer_ptr<split_node_t> get_root(nonstd::observer_ptr<tree_node_t> node);
+
+/**
+ * A draggable divider band between two adjacent children of a split node,
+ * in wset-global coordinates. The band rectangle is widened by `tolerance`
+ * along the split axis so that narrow gaps are grabbable.
+ */
+struct divider_band_t
+{
+    nonstd::observer_ptr<split_node_t> split;
+    /** Index of the left/top child; dragging moves the boundary between
+     *  children[index] and children[index + 1]. */
+    int index;
+    wf::geometry_t band;
+    split_direction_t direction;
+};
+
+/**
+ * Enumerate the divider bands of the tree (between adjacent children of
+ * every split node).
+ */
+std::vector<divider_band_t> get_divider_bands(
+    const std::unique_ptr<tree_node_t>& root, int tolerance = 4);
+
 
 /**
  * Call the given function on every view in the tree.

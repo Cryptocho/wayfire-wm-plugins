@@ -264,6 +264,11 @@ split_direction_t split_node_t::get_split_direction() const
     return this->split_direction;
 }
 
+void split_node_t::set_direction(split_direction_t direction)
+{
+    this->split_direction = direction;
+}
+
 split_node_t::split_node_t(split_direction_t dir)
 {
     this->split_direction = dir;
@@ -421,5 +426,68 @@ nonstd::observer_ptr<split_node_t> get_root(
     }
 
     return get_root(node->parent);
+}
+
+static void collect_divider_bands(const std::unique_ptr<tree_node_t>& node,
+    std::vector<divider_band_t>& out, int tolerance)
+{
+    auto split = node->as_split_node();
+    if (!split)
+    {
+        return;
+    }
+
+    for (size_t i = 0; i + 1 < split->children.size(); i++)
+    {
+        auto &first  = split->children[i];
+        auto &second = split->children[i + 1];
+        divider_band_t band;
+        band.split     = {split};
+        band.index     = i;
+        band.direction = split->get_split_direction();
+
+        if (band.direction == SPLIT_VERTICAL)
+        {
+            /* children side by side: the divider is a vertical strip */
+            band.band.x      = first->geometry.x + first->geometry.width;
+            band.band.width  = second->geometry.x - band.band.x;
+            band.band.y      = split->geometry.y;
+            band.band.height = split->geometry.height;
+        } else
+        {
+            /* children stacked vertically: the divider is a horizontal
+             * strip */
+            band.band.y      = first->geometry.y + first->geometry.height;
+            band.band.height = second->geometry.y - band.band.y;
+            band.band.x      = split->geometry.x;
+            band.band.width  = split->geometry.width;
+        }
+
+        /* widen along the split axis so narrow gaps are grabbable */
+        if (band.direction == SPLIT_VERTICAL)
+        {
+            band.band.x      -= tolerance;
+            band.band.width  += 2 * tolerance;
+        } else
+        {
+            band.band.y      -= tolerance;
+            band.band.height += 2 * tolerance;
+        }
+
+        out.push_back(band);
+    }
+
+    for (auto& child : split->children)
+    {
+        collect_divider_bands(child, out, tolerance);
+    }
+}
+
+std::vector<divider_band_t> get_divider_bands(
+    const std::unique_ptr<tree_node_t>& root, int tolerance)
+{
+    std::vector<divider_band_t> out;
+    collect_divider_bands(root, out, tolerance);
+    return out;
 }
 }

@@ -267,6 +267,87 @@ check("re-float uses remembered geometry",
       str(info.get("geometry")))
 call("layout-manager/toggle-float", {"id": target})  # back to tiling
 
+# --- M-D: divider drag -----------------------------------------------------
+# leaves are [8..423][431..849][857..1272]; band centers: x=427 and x=853
+def vinput(*args):
+    subprocess.run([os.path.join(os.environ.get("REPO", "."), "build", "vinput"),
+                    WF_DISPLAY, *args], check=True)
+
+lay = call("layout-manager/set-mode", {"mode": "tiling"}) and layout()
+ids = []
+leaves(lay.get("layout", {}), ids)
+geo_before = {e["view-id"]: e["geometry"] for e in ids}
+
+# NOTE: the whole gesture must run inside one vinput invocation — each
+# invocation is a separate client, and disconnecting destroys the virtual
+# pointer (an implicit release, which would end the drag).
+vinput("move", "-5000", "-5000", "move", "427", "360",
+       "button", "0x110", "1",
+       "move", "20", "0", "move", "20", "0",
+       "button", "0x110", "0")
+time.sleep(0.4)
+
+ids = []
+leaves(layout().get("layout", {}), ids)
+geo_after = {e["view-id"]: e["geometry"] for e in ids}
+w0b = geo_before[ids[0]["view-id"]]["width"]
+w1b = geo_before[ids[1]["view-id"]]["width"]
+w0a = geo_after[ids[0]["view-id"]]["width"]
+w1a = geo_after[ids[1]["view-id"]]["width"]
+check("divider drag widens left view by ~40px", abs((w0a - w0b) - 40) <= 2,
+      f"{w0b}->{w0a}")
+check("divider drag shrinks right view by ~40px", abs((w1b - w1a) - 40) <= 2,
+      f"{w1b}->{w1a}")
+check("third view untouched by drag",
+      geo_after[ids[2]["view-id"]] == geo_before[ids[2]["view-id"]], "")
+info0 = view_info(ids[0]["view-id"])
+check("view geometry follows the dragged split",
+      info0.get("geometry") == geo_after[ids[0]["view-id"]],
+      f"{info0.get('geometry')} vs {geo_after[ids[0]['view-id']]}")
+
+# drag on view content (not a divider): tree must not change
+vinput("move", "-5000", "-5000", "move", "1064", "360",
+       "button", "0x110", "1",
+       "move", "20", "0", "move", "20", "0",
+       "button", "0x110", "0")
+time.sleep(0.4)
+ids2 = []
+leaves(layout().get("layout", {}), ids2)
+check("drag on view content does not change the tree",
+      {e["view-id"]: e["geometry"] for e in ids2} == geo_after, "")
+
+# --- M-D: split command -----------------------------------------------------
+target = ids[1]["view-id"]
+r = call("layout-manager/split", {"id": target, "direction": "v"})
+check("split command accepted", "split" in r, str(r))
+lay = layout()
+nested = lay.get("layout", {}).get("vertical-split", [])
+# "v" = stacked vertically = tile SPLIT_HORIZONTAL = "horizontal-split" key
+check("wrapped split appears in the tree",
+      len(nested) == 3 and "horizontal-split" in nested[1], json.dumps(lay)[:200])
+
+# a new window with the wrapped view focused joins the nested split
+extra = subprocess.Popen(["kitty"], env={**os.environ,
+        "WAYLAND_DISPLAY": WF_DISPLAY},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+try:
+    ks = wait_kitties(4)
+    check("4th kitty mapped for split test", len(ks) >= 4, f"n={len(ks)}")
+    time.sleep(0.3)
+    lay = layout()
+    nested = lay.get("layout", {}).get("vertical-split", [])
+    inner = nested[1].get("horizontal-split", []) if len(nested) == 3 else []
+    check("new view joined the wrapped split", len(inner) == 2,
+          json.dumps(nested[1])[:160] if len(nested) == 3 else str(nested))
+finally:
+    if extra.poll() is None:
+        extra.terminate()
+        try:
+            extra.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            extra.kill()
+    time.sleep(0.3)
+
 # --- round trip: harvest again --------------------------------------------
 r = call("layout-manager/set-mode", {"mode": "stacking"})
 lay = layout()
@@ -285,4 +366,4 @@ print()
 if failures:
     print(f"LM TEST FAIL: {len(failures)} failures: {failures}")
     sys.exit(1)
-print("LM TEST OK (M-A+M-B+M-C)")
+print("LM TEST OK (M-A+M-B+M-C+M-D)")

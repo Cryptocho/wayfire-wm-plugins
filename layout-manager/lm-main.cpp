@@ -19,6 +19,9 @@
 #include <wayfire/bindings-repository.hpp>
 #include <wayfire/debug.hpp>
 #include <wayfire/seat.hpp>
+#include <wayfire/output-layout.hpp>
+#include <wayfire/plugins/common/input-grab.hpp>
+#include <linux/input-event-codes.h>
 
 #include <algorithm>
 #include <string>
@@ -95,12 +98,65 @@ class lm_output_t : public wf::per_output_plugin_instance_t
     bool want_tile(wayfire_toplevel_view view);
     bool handle_toggle_float();
     void handle_view_mapped(wayfire_toplevel_view toplevel);
+    bool handle_split(bool horizontal);
+    void start_divider_drag(const lm::divider_band_t& band, int axis_pos);
+    void stop_divider_drag();
+    /* Advance the drag by an axis-relative delta (driven directly by the
+     * core motion listener, bypassing grab routing — the implicit button
+     * grab that normally anchors pointer motion is never established
+     * because the initial press is swallowed). */
+    void drag_motion(int axis_delta);
+    void drag_motion_raw(double dx, double dy);
+    bool divider_drag_active() const
+    {
+        return drag.active;
+    }
+
+    wf::plugin_activation_data_t grab_interface = {
+        .name = "layout-manager",
+        .capabilities = wf::CAPABILITY_MANAGE_COMPOSITOR,
+        .cancel = [=] { stop_divider_drag(); },
+    };
+
+  private:
+    /* Divider drag state: adjusts the fractions of two adjacent children
+     * of one split node. */
+    struct
+    {
+        bool active = false;
+        nonstd::observer_ptr<lm::split_node_t> split;
+        lm::split_direction_t axis = lm::SPLIT_VERTICAL;
+        int index = 0;
+        int start_pos  = 0;
+        int cur_pos    = 0;
+        double start_f0 = 0.0;
+        double avail    = 1.0;
+        int32_t splittable = 1;
+    } drag;
+
+    std::unique_ptr<wf::input_grab_t> input_grab;
+
+    /* sway MIN_SANE_W/H (include/sway/tree/node.h:8-9) */
+    static constexpr int MIN_SANE_W = 100;
+    static constexpr int MIN_SANE_H = 60;
 
   private:
     wf::option_wrapper_t<wf::activatorbinding_t> key_toggle_mode{
         "layout-manager/key_toggle_mode"};
     wf::option_wrapper_t<wf::activatorbinding_t> key_toggle_float{
         "layout-manager/key_toggle_float"};
+    wf::option_wrapper_t<wf::activatorbinding_t> key_split_horizontal{
+        "layout-manager/key_split_horizontal"};
+    wf::option_wrapper_t<wf::activatorbinding_t> key_split_vertical{
+        "layout-manager/key_split_vertical"};
+    wf::activator_callback on_split_horizontal = [=] (auto)
+    {
+        return handle_split(true);
+    };
+    wf::activator_callback on_split_vertical = [=] (auto)
+    {
+        return handle_split(false);
+    };
     wf::activator_callback on_toggle_mode = [=] (auto)
     {
         return handle_toggle_mode();
@@ -234,6 +290,8 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         wf::get_core().connect(&on_focus_changed);
         wf::get_core().connect(&on_view_pre_moved_to_wset);
         wf::get_core().connect(&on_view_moved_to_wset);
+        wf::get_core().connect(&on_divider_button);
+        wf::get_core().connect(&on_divider_motion);
 
         register_ipc();
         LOGI("layout-manager init: mode=", mode_name(mode));
@@ -267,6 +325,21 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         set_mode(mode == layout_mode_t::TILING ? layout_mode_t::STACKING :
             layout_mode_t::TILING);
         return true;
+    }
+
+    /* sway split command: wrap the focused tiled view in a new split so
+     * that views inserted while it is focused stack in the new direction.
+     * horizontal = side by side (tile convention SPLIT_VERTICAL). */
+    bool split_focused_view(wayfire_toplevel_view view, bool horizontal)
+    {
+        if (!is_tiling() || !view || !view->get_wset())
+        {
+            return false;
+        }
+
+        auto &data = lm_workspace_set_data_t::get(view->get_wset());
+        return data.split_view(view,
+            horizontal ? lm::SPLIT_VERTICAL : lm::SPLIT_HORIZONTAL);
     }
 
     layout_mode_t get_mode() const
@@ -630,6 +703,109 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         }
     };
 
+    /* Divider drag entry: a BTN_LEFT press inside a divider band starts
+     * a fraction drag (the press is swallowed so views/decoration never
+     * see it). While dragging, further button events are swallowed too;
+     * release stops the drag. Same early-swallow route as the ob-menu
+     * desktop right-click. */
+    wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>>
+    on_divider_button = [=] (wf::input_event_signal<wlr_pointer_button_event> *ev)
+    {
+        if (ev->event->button != BTN_LEFT)
+        {
+            return;
+        }
+
+        if (auto *dragging = outputs.find_active_drag())
+        {
+            if (ev->event->state == WL_POINTER_BUTTON_STATE_RELEASED)
+            {
+                dragging->stop_divider_drag();
+            }
+
+            ev->mode = wf::input_event_processing_mode_t::IGNORE;
+            return;
+        }
+
+        if ((ev->mode != wf::input_event_processing_mode_t::FULL) ||
+            (ev->event->state != WL_POINTER_BUTTON_STATE_PRESSED) ||
+            !is_tiling())
+        {
+            return;
+        }
+
+        auto gc = wf::get_core().get_cursor_position();
+        auto wo = wf::get_core().output_layout->get_output_at(gc.x, gc.y);
+        auto *inst = wo ? outputs.get(wo) : nullptr;
+        if (!inst || !wo->wset())
+        {
+            return;
+        }
+
+        auto wset = wo->wset();
+        auto &data = lm_workspace_set_data_t::get(wset);
+        auto vp = wset->get_current_workspace();
+        auto &root = data.roots[vp.x][vp.y];
+        if (!root)
+        {
+            return;
+        }
+
+        /* no divider dragging while a tiled view is fullscreen */
+        bool fullscreen = false;
+        lm::for_each_view(root, [&] (wayfire_toplevel_view v)
+        {
+            fullscreen |= v->pending_fullscreen();
+        });
+        if (fullscreen)
+        {
+            return;
+        }
+
+        /* cursor in wset-global coordinates */
+        auto og    = wo->get_layout_geometry();
+        auto size  = wset->get_last_output_geometry().value_or(
+            lm::default_output_resolution);
+        wf::point_t wsetg{
+            gc.x - og.x + vp.x * size.width,
+            gc.y - og.y + vp.y * size.height};
+
+        for (auto &band : lm::get_divider_bands(root))
+        {
+            if ((wsetg.x >= band.band.x) &&
+                (wsetg.x < band.band.x + band.band.width) &&
+                (wsetg.y >= band.band.y) &&
+                (wsetg.y < band.band.y + band.band.height))
+            {
+                int axis_pos = (band.direction == lm::SPLIT_VERTICAL) ?
+                    wsetg.x : wsetg.y;
+                inst->start_divider_drag(band, axis_pos);
+                if (inst->divider_drag_active())
+                {
+                    ev->mode = wf::input_event_processing_mode_t::IGNORE;
+                }
+                return;
+            }
+        }
+    };
+
+    /* While a divider drag is active, motion is driven directly from the
+     * device-event signal (the press that started the drag was swallowed,
+     * so wayfire's implicit button grab never anchors pointer motion to
+     * the grab node). */
+    wf::signal::connection_t<wf::input_event_signal<wlr_pointer_motion_event>>
+    on_divider_motion = [=] (wf::input_event_signal<wlr_pointer_motion_event> *ev)
+    {
+        auto *dragging = outputs.find_active_drag();
+        if (!dragging)
+        {
+            return;
+        }
+
+        dragging->drag_motion_raw(ev->event->delta_x, ev->event->delta_y);
+        ev->mode = wf::input_event_processing_mode_t::IGNORE;
+    };
+
     /* ---- outputs & IPC ---- */
 
     struct outputs_t : public wf::per_output_tracker_mixin_t<lm_output_t>
@@ -640,6 +816,19 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         {
             auto it = output_instance.find(output);
             return it == output_instance.end() ? nullptr : it->second.get();
+        }
+
+        lm_output_t *find_active_drag()
+        {
+            for (auto &[wo, inst] : output_instance)
+            {
+                if (inst->divider_drag_active())
+                {
+                    return inst.get();
+                }
+            }
+
+            return nullptr;
         }
 
       protected:
@@ -761,6 +950,39 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             return r;
         });
 
+        ipc_repo->register_method("layout-manager/split",
+            [this] (wf::json_t data)
+        {
+            wf::json_t r;
+            wayfire_toplevel_view view;
+            if (data.has_member("id"))
+            {
+                view = wf::toplevel_cast(
+                    wf::ipc::find_view_by_id(wf::ipc::json_get_uint64(data, "id")));
+            } else
+            {
+                view = wf::toplevel_cast(wf::get_core().seat->get_active_view());
+            }
+
+            if (!view)
+            {
+                r["error"] = std::string("no view to split");
+                return r;
+            }
+
+            std::string dir = data.has_member("direction") ?
+                (std::string)data["direction"] : "v";
+            bool ok = split_focused_view(view, dir == "h");
+            if (!ok)
+            {
+                r["error"] = std::string("view is not tiled");
+                return r;
+            }
+
+            r["split"] = dir;
+            return r;
+        });
+
         ipc_repo->register_method("layout-manager/get-layout",
             [this] (const wf::json_t & params)
         {
@@ -773,6 +995,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         ipc_repo->unregister_method("layout-manager/get-mode");
         ipc_repo->unregister_method("layout-manager/set-mode");
         ipc_repo->unregister_method("layout-manager/toggle-mode");
+        ipc_repo->unregister_method("layout-manager/split");
         ipc_repo->unregister_method("layout-manager/toggle-float");
         ipc_repo->unregister_method("layout-manager/get-view-state");
         ipc_repo->unregister_method("layout-manager/get-layout");
@@ -817,6 +1040,101 @@ void lm_output_t::handle_view_mapped(wayfire_toplevel_view toplevel)
     }
 }
 
+bool lm_output_t::handle_split(bool horizontal)
+{
+    auto view = wf::toplevel_cast(wf::get_core().seat->get_active_view());
+    if (!view || (view->get_output() != output))
+    {
+        return false;
+    }
+
+    return plugin->split_focused_view(view, horizontal);
+}
+
+void lm_output_t::start_divider_drag(const lm::divider_band_t& band,
+    int axis_pos)
+{
+    if (drag.active || !band.split)
+    {
+        return;
+    }
+
+    if (!output->activate_plugin(&grab_interface))
+    {
+        return;
+    }
+
+    drag.active     = true;
+    drag.split      = band.split;
+    drag.axis       = band.direction;
+    drag.index      = band.index;
+    drag.start_pos  = axis_pos;
+    drag.cur_pos    = axis_pos;
+    drag.start_f0   = band.split->children[band.index]->fraction;
+    drag.avail      = drag.start_f0 +
+        band.split->children[band.index + 1]->fraction;
+    drag.splittable = (band.direction == lm::SPLIT_VERTICAL) ?
+        band.split->geometry.width : band.split->geometry.height;
+    if (drag.splittable <= 0)
+    {
+        drag.splittable = 1;
+    }
+
+    input_grab->grab_input(wf::scene::layer::OVERLAY);
+    LOGI("layout-manager: divider drag started on split ", band.index);
+}
+
+void lm_output_t::stop_divider_drag()
+{
+    if (!drag.active)
+    {
+        return;
+    }
+
+    drag.active = false;
+    drag.split  = nullptr;
+    if (output->is_plugin_active(grab_interface.name))
+    {
+        output->deactivate_plugin(&grab_interface);
+    }
+
+    input_grab->ungrab_input();
+}
+
+void lm_output_t::drag_motion_raw(double dx, double dy)
+{
+    if (!drag.active)
+    {
+        return;
+    }
+
+    drag_motion((int)std::lround(drag.axis == lm::SPLIT_VERTICAL ? dx : dy));
+}
+
+void lm_output_t::drag_motion(int axis_delta)
+{
+    if (!drag.active || !drag.split || (drag.split->children.size() <
+        (size_t)(drag.index + 2)))
+    {
+        stop_divider_drag();
+        return;
+    }
+
+    drag.cur_pos += axis_delta;
+    int delta = drag.cur_pos - drag.start_pos;
+
+    int min_sane = (drag.axis == lm::SPLIT_VERTICAL) ? MIN_SANE_W : MIN_SANE_H;
+    double min_share = (double)min_sane / drag.splittable;
+    double f0 = drag.start_f0 + (double)delta / drag.splittable;
+    f0 = std::clamp(f0, min_share, drag.avail - min_share);
+
+    drag.split->children[drag.index]->fraction = f0;
+    drag.split->children[drag.index + 1]->fraction = drag.avail - f0;
+
+    lm::autocommit_transaction_t tx;
+    drag.split->set_geometry(drag.split->geometry, tx.tx);
+}
+
 bool lm_output_t::handle_toggle_float()
 {
     auto view = wf::toplevel_cast(wf::get_core().seat->get_active_view());
@@ -832,6 +1150,10 @@ void lm_output_t::init()
 {
     output->add_activator(key_toggle_mode, &on_toggle_mode);
     output->add_activator(key_toggle_float, &on_toggle_float);
+    output->add_activator(key_split_horizontal, &on_split_horizontal);
+    output->add_activator(key_split_vertical, &on_split_vertical);
+    input_grab = std::make_unique<wf::input_grab_t>("layout-manager", output,
+        nullptr, nullptr, nullptr);
 
     output->connect(&on_view_mapped);
     output->connect(&on_tile_request);
@@ -845,6 +1167,9 @@ void lm_output_t::fini()
 {
     output->rem_binding(&on_toggle_mode);
     output->rem_binding(&on_toggle_float);
+    output->rem_binding(&on_split_horizontal);
+    output->rem_binding(&on_split_vertical);
+    stop_divider_drag();
 }
 } // namespace lm
 
