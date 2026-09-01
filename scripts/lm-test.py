@@ -206,14 +206,74 @@ check("pre-tiling geometry restored, tiled-edges cleared", restored,
       json.dumps({v["id"]: view_info(v["id"]).get("geometry")
                   for v in find_kitty()})[:300])
 
-# --- round trip: harvest again --------------------------------------------
-r = call("layout-manager/set-mode", {"mode": "tiling"})
+# --- M-C: per-view float ---------------------------------------------------
+call("layout-manager/set-mode", {"mode": "tiling"})
+time.sleep(0.2)
+ks = find_kitty()
+target = ks[1]["id"]
+
+# tiled -> floating: 50% x 75% of the 1280x720 workarea, centered
+r = call("layout-manager/toggle-float", {"id": target})
+check("toggle-float floats the view", r.get("floating") is True, str(r))
 lay = layout()
 ids = []
 leaves(lay.get("layout", {}), ids)
-check("re-harvest puts all 3 kitties back in the tree", len(ids) == 3,
-      str(len(ids)))
+check("tree shrinks to 2 leaves", len(ids) == 2, str(len(ids)))
+info = view_info(target)
+check("float geometry = 50%x75% centered",
+      info.get("geometry") == {"x": 320, "y": 90, "width": 640, "height": 540},
+      str(info.get("geometry")))
+check("floated view is not tiled", info.get("tiled-edges") == 0,
+      str(info.get("tiled-edges")))
+st = call("layout-manager/get-view-state", {"id": target})
+check("float state recorded (has_saved)",
+      st.get("floating") is True and st.get("has_saved") is True, str(st))
+
+# floating view is untouched by mode switches
 call("layout-manager/set-mode", {"mode": "stacking"})
+time.sleep(0.2)
+info = view_info(target)
+check("floating view keeps geometry across mode switch",
+      info.get("geometry") == {"x": 320, "y": 90, "width": 640, "height": 540},
+      str(info.get("geometry")))
+st = call("layout-manager/get-view-state", {"id": target})
+check("floating flag persists across mode switch",
+      st.get("floating") is True, str(st))
+
+call("layout-manager/set-mode", {"mode": "tiling"})
+time.sleep(0.2)
+lay = layout()
+ids = []
+leaves(lay.get("layout", {}), ids)
+check("only the 2 non-floating views harvested", len(ids) == 2, str(len(ids)))
+
+# floating -> tiled: re-enters the tree
+r = call("layout-manager/toggle-float", {"id": target})
+check("toggle-float re-tiles the view", r.get("floating") is False, str(r))
+lay = layout()
+ids = []
+leaves(lay.get("layout", {}), ids)
+check("tree back to 3 leaves", len(ids) == 3, str(len(ids)))
+st = call("layout-manager/get-view-state", {"id": target})
+check("saved float geometry retained", st.get("has_saved") is True and
+      st.get("saved_geom") == {"x": 320, "y": 90, "width": 640, "height": 540},
+      str(st))
+
+# tiled -> floating again: uses the remembered float geometry
+call("layout-manager/toggle-float", {"id": target})
+info = view_info(target)
+check("re-float uses remembered geometry",
+      info.get("geometry") == {"x": 320, "y": 90, "width": 640, "height": 540},
+      str(info.get("geometry")))
+call("layout-manager/toggle-float", {"id": target})  # back to tiling
+
+# --- round trip: harvest again --------------------------------------------
+r = call("layout-manager/set-mode", {"mode": "stacking"})
+lay = layout()
+ids = []
+leaves(lay.get("layout", {}), ids)
+check("tree is empty after final switch to stacking", len(ids) == 0,
+      str(len(ids)))
 
 r = call("layout-manager/toggle-mode")
 check("toggle-mode works", r.get("mode") == "tiling", str(r))
@@ -225,4 +285,4 @@ print()
 if failures:
     print(f"LM TEST FAIL: {len(failures)} failures: {failures}")
     sys.exit(1)
-print("LM TEST OK (M-A+M-B)")
+print("LM TEST OK (M-A+M-B+M-C)")

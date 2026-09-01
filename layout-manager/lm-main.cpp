@@ -13,6 +13,7 @@
 #include <wayfire/workspace-set.hpp>
 #include <wayfire/toplevel-view.hpp>
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
+#include <wayfire/plugins/ipc/ipc-helpers.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
 #include <wayfire/option-wrapper.hpp>
 #include <wayfire/bindings-repository.hpp>
@@ -92,13 +93,21 @@ class lm_output_t : public wf::per_output_plugin_instance_t
     bool handle_toggle_mode();
     bool tiling_active();
     bool want_tile(wayfire_toplevel_view view);
+    bool handle_toggle_float();
+    void handle_view_mapped(wayfire_toplevel_view toplevel);
 
   private:
     wf::option_wrapper_t<wf::activatorbinding_t> key_toggle_mode{
         "layout-manager/key_toggle_mode"};
+    wf::option_wrapper_t<wf::activatorbinding_t> key_toggle_float{
+        "layout-manager/key_toggle_float"};
     wf::activator_callback on_toggle_mode = [=] (auto)
     {
         return handle_toggle_mode();
+    };
+    wf::activator_callback on_toggle_float = [=] (auto)
+    {
+        return handle_toggle_float();
     };
 
     void attach_view(wayfire_toplevel_view view, std::optional<wf::point_t> vp = {})
@@ -126,10 +135,9 @@ class lm_output_t : public wf::per_output_plugin_instance_t
     wf::signal::connection_t<wf::view_mapped_signal> on_view_mapped =
         [=] (wf::view_mapped_signal *ev)
     {
-        auto toplevel = wf::toplevel_cast(ev->view);
-        if (toplevel && tiling_active() && want_tile(toplevel))
+        if (auto toplevel = wf::toplevel_cast(ev->view))
         {
-            attach_view(toplevel);
+            handle_view_mapped(toplevel);
         }
     };
 
@@ -269,6 +277,108 @@ class wayfire_layout_manager : public wf::plugin_interface_t
     bool is_tiling() const
     {
         return mode == layout_mode_t::TILING;
+    }
+
+    /* Per-view float toggle (sway floating toggle). Only meaningful in
+     * tiling mode: a tiled view becomes floating (remembering its float
+     * geometry across toggles), a floating view re-enters the tree after
+     * the last focused tiled view. */
+    bool toggle_float_view(wayfire_toplevel_view view)
+    {
+        if (!is_tiling() || !view || !view->get_wset())
+        {
+            return false;
+        }
+
+        auto &st   = lm_view_state_t::get(view);
+        auto node  = lm::view_node_t::get_node(view);
+        auto &data = lm_workspace_set_data_t::get(view->get_wset());
+
+        if (node)
+        {
+            /* tiled -> floating: back to the wset node, then give it a
+             * floating geometry */
+            data.detach_views({node});
+            st.floating = true;
+
+            wf::geometry_t target;
+            if (st.has_saved)
+            {
+                target = st.saved_geom;
+            } else
+            {
+                target = default_float_geometry(view);
+                st.has_saved   = true;
+                st.saved_geom  = target;
+            }
+
+            lm::autocommit_transaction_t tx;
+            view->toplevel()->pending().tiled_edges = 0;
+            view->toplevel()->pending().geometry    = target;
+            tx.tx->add_object(view->toplevel());
+            wf::get_core().seat->focus_view(view);
+            LOGI("layout-manager: floated view ", view->get_id());
+            return true;
+        }
+
+        if (st.floating && can_tile_view(view))
+        {
+            /* floating -> tiled: remember the float geometry, insert after
+             * the last focused tiled view (sway: adopt reference size —
+             * the fraction model assigns it a fresh share) */
+            st.has_saved   = true;
+            st.saved_geom  = view->get_pending_geometry();
+            st.pre_tiling  = st.saved_geom;
+            st.has_pre     = true;
+            st.floating    = false;
+            data.attach_view(view);
+            wf::get_core().seat->focus_view(view);
+            LOGI("layout-manager: tiled floating view ", view->get_id());
+            return true;
+        }
+
+        return false;
+    }
+
+  private:
+    /* sway floating_set_default_size semantics (container.c:896-917):
+     * half the workarea width, three quarters of its height, clamped to
+     * the view's min/max sizes, centered in the workarea. */
+    wf::geometry_t default_float_geometry(wayfire_toplevel_view view)
+    {
+        auto wo = view->get_output();
+        auto wa = wo ? wo->workarea->get_workarea() : wf::geometry_t{0, 0, 1280, 720};
+        int w = wa.width * 0.5;
+        int h = wa.height * 0.75;
+
+        auto min = view->toplevel()->get_min_size();
+        auto max = view->toplevel()->get_max_size();
+        if (min.width > 0)
+        {
+            w = std::max(w, min.width);
+        }
+
+        if (min.height > 0)
+        {
+            h = std::max(h, min.height);
+        }
+
+        if (max.width > 0)
+        {
+            w = std::min(w, max.width);
+        }
+
+        if (max.height > 0)
+        {
+            h = std::min(h, max.height);
+        }
+
+        return {
+            wa.x + (wa.width - w) / 2,
+            wa.y + (wa.height - h) / 2,
+            w,
+            h,
+        };
     }
 
     void set_mode(layout_mode_t m)
@@ -444,6 +554,13 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         return !float_matcher || !float_matcher->matches(view);
     }
 
+    /* Auto-float rules: matching views never enter the tree on their own */
+    bool auto_float(wayfire_toplevel_view view)
+    {
+        return is_tiling() && can_tile_view(view) && float_matcher &&
+               float_matcher->matches(view);
+    }
+
     /* ---- core-level signal handlers (same split as Wayfire tile) ---- */
 
     wf::signal::connection_t<wf::view_unmapped_signal> on_view_unmapped =
@@ -583,6 +700,67 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             return r;
         });
 
+        ipc_repo->register_method("layout-manager/toggle-float",
+            [this] (wf::json_t data)
+        {
+            wf::json_t r;
+            wayfire_toplevel_view view;
+            if (data.has_member("id"))
+            {
+                view = wf::toplevel_cast(
+                    wf::ipc::find_view_by_id(wf::ipc::json_get_uint64(data, "id")));
+            } else
+            {
+                view = wf::toplevel_cast(wf::get_core().seat->get_active_view());
+            }
+
+            if (!view)
+            {
+                r["error"] = std::string("no view to toggle");
+                return r;
+            }
+
+            if (!toggle_float_view(view))
+            {
+                r["error"] = std::string("toggle not applicable to this view");
+                return r;
+            }
+
+            r["floating"] = lm_view_state_t::is_floating(view);
+            return r;
+        });
+
+        ipc_repo->register_method("layout-manager/get-view-state",
+            [] (wf::json_t data)
+        {
+            wf::json_t r;
+            if (!data.has_member("id"))
+            {
+                r["error"] = std::string("missing id");
+                return r;
+            }
+
+            auto view = wf::toplevel_cast(
+                wf::ipc::find_view_by_id(wf::ipc::json_get_uint64(data, "id")));
+            if (!view)
+            {
+                r["error"] = std::string("no such view");
+                return r;
+            }
+
+            bool has = view->has_data<lm_view_state_t>();
+            auto *st = has ? view->get_data<lm_view_state_t>().get() : nullptr;
+            r["floating"]  = st && st->floating;
+            r["has_saved"] = st && st->has_saved;
+            r["has_pre"]   = st && st->has_pre;
+            if (st && st->has_saved)
+            {
+                r["saved_geom"] = wf::ipc::geometry_to_json(st->saved_geom);
+            }
+
+            return r;
+        });
+
         ipc_repo->register_method("layout-manager/get-layout",
             [this] (const wf::json_t & params)
         {
@@ -595,6 +773,8 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         ipc_repo->unregister_method("layout-manager/get-mode");
         ipc_repo->unregister_method("layout-manager/set-mode");
         ipc_repo->unregister_method("layout-manager/toggle-mode");
+        ipc_repo->unregister_method("layout-manager/toggle-float");
+        ipc_repo->unregister_method("layout-manager/get-view-state");
         ipc_repo->unregister_method("layout-manager/get-layout");
     }
 };
@@ -619,9 +799,39 @@ bool lm_output_t::handle_toggle_mode()
     return plugin->toggle_mode();
 }
 
+void lm_output_t::handle_view_mapped(wayfire_toplevel_view toplevel)
+{
+    if (!tiling_active())
+    {
+        return;
+    }
+
+    if (want_tile(toplevel))
+    {
+        attach_view(toplevel);
+    } else if (plugin->auto_float(toplevel))
+    {
+        /* auto-float rules: keep the client-chosen geometry, just
+         * mark it as floating so it stays out of the tree */
+        lm_view_state_t::get(toplevel).floating = true;
+    }
+}
+
+bool lm_output_t::handle_toggle_float()
+{
+    auto view = wf::toplevel_cast(wf::get_core().seat->get_active_view());
+    if (!view || (view->get_output() != output))
+    {
+        return false;
+    }
+
+    return plugin->toggle_float_view(view);
+}
+
 void lm_output_t::init()
 {
     output->add_activator(key_toggle_mode, &on_toggle_mode);
+    output->add_activator(key_toggle_float, &on_toggle_float);
 
     output->connect(&on_view_mapped);
     output->connect(&on_tile_request);
@@ -634,6 +844,7 @@ void lm_output_t::init()
 void lm_output_t::fini()
 {
     output->rem_binding(&on_toggle_mode);
+    output->rem_binding(&on_toggle_float);
 }
 } // namespace lm
 
