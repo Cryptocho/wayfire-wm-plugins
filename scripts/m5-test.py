@@ -86,6 +86,14 @@ for _ in range(100):
 check("kitty autostarted & mapped", bool(kitty and kitty.get("mapped")),
       str(bool(kitty)))
 
+# --- root menu is clamped into the workarea (no off-screen menus) --------
+r = menu("open-root", x=1279, y=719)
+st = r.get("state", {})
+box = st.get("root_box")
+check("menu anchored at bottom-right is clamped into view",
+      box and box[0] + box[2] <= 1280 and box[1] + box[3] <= 720, str(box))
+menu("close")
+
 # --- dynamic menus ------------------------------------------------------
 r = menu("open-root", menu="client-list-combined-menu", x=100, y=100)
 st = r.get("state", {})

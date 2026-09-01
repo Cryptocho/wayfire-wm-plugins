@@ -14,7 +14,7 @@ WAYFIRE_PLUGIN_PATH=$PWD/build/layout-manager:$PWD/build/ob-decor:$PWD/build/ob-
 WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
 WLR_BACKENDS=wayland wayfire -c test/wayfire-layout-adaptive.ini -d
 ```
-(配置已含 `tiling_layout = adaptive`、`focus_follows_mouse = true`、vswitch `<super>F1/F2`、root menu `<super>F3`)
+(配置已含 `tiling_layout = adaptive`、`focus_follows_mouse = true`、vswitch `<super>F1/F2`、root menu `<super>F3`;**`<super>T` 开新 kitty**——测螺旋就是反复按它)
 
 ### T-1 adaptive 减半插入(螺旋)
 

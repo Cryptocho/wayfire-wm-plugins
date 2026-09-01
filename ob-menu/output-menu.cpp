@@ -300,6 +300,18 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
         h += menu_row_height(*menu, i, theme.theme());
     }
 
+    /* Keep the menu visible: clamp the box into the workarea (openbox
+     * shifts the menu when the anchor is too close to an edge — e.g. a
+     * right-click in the free space around a full-screen window must not
+     * push the menu off-screen). */
+    {
+        auto wa = output->workarea->get_workarea();
+        int x = std::min((int)pos.x, wa.x + std::max(0, wa.width - w));
+        int y = std::min((int)pos.y, wa.y + std::max(0, wa.height - h));
+        pos.x = std::max(x, wa.x);
+        pos.y = std::max(y, wa.y);
+    }
+
     level.menu = menu;
     level.box  = {pos.x, pos.y, (uint32_t)w, (uint32_t)h};
     level.item_rects.clear();
