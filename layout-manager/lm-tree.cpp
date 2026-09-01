@@ -411,8 +411,13 @@ bool flatten_tree(std::unique_ptr<tree_node_t>& root)
         }
     }
 
-    /* Rewire the tree, skipping the current root */
-    child_ptr->parent = root->parent;
+    /* Rewire the tree, skipping the current root. The promoted child
+     * inherits the skipped split's fraction: it now occupies exactly the
+     * area that split had, so closing one half of a split lets the other
+     * half reclaim the whole share (adaptive "restore pre-split size",
+     * and correct fractions for any single-child chain). */
+    child_ptr->fraction = root->fraction;
+    child_ptr->parent   = root->parent;
     root = std::move(root->children.front());
     return true;
 }

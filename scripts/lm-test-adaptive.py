@@ -155,14 +155,56 @@ if len(ids) == 3:
             fid = (call("window-rules/get-focused-view").get("info", {}) or {}).get("id")
             check("focus given to the new window", fid == q4[0]["view-id"],
                   f"focused={fid}")
+        # --- closing the new quarter: k3 reclaims its halved share --------
+        # (SIGTERM the spawned kitty: graceful exit == window close)
+        extra.terminate()
+        try:
+            extra.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            extra.kill()
+        deadline = time.time() + 8
+        while time.time() < deadline and len(find_kitty()) >= 4:
+            time.sleep(0.1)
+        ids = []
+        leaves(layout(), ids)
+        k3 = [e for e in ids if near(e["geometry"], 644, 364, 628, 348)]
+        check("closing the quarter: k3 reclaims 628x348",
+              len(ids) == 3 and len(k3) == 1,
+              json.dumps([e["geometry"] for e in ids]))
+    except NameError:
+        pass
     finally:
-        if extra.poll() is None:
-            extra.terminate()
-            try:
+        try:
+            if extra.poll() is None:
+                extra.terminate()
                 extra.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                extra.kill()
+        except NameError:
+            pass
         time.sleep(0.3)
+
+    # --- closing k3 (bottom-right half): k2 must grow back to 628x704 ----
+    # and split the workarea 50/50 with k1 — NOT 2/3 width
+    k3e = next((e for e in ids if near(e["geometry"], 644, 364, 628, 348)),
+               None)
+    if k3e:
+        # click the titlebar close button of k3 (decor is active in this
+        # config; the close button sits at wbox-local [w-17, 17])
+        g = k3e["geometry"]
+        subprocess.run([os.path.join(REPO, "build", "vinput"), WF_DISPLAY,
+                        "move", "-5000", "-5000",
+                        "move", str(g["x"] + g["width"] - 17),
+                        str(g["y"] + 17),
+                        "click", "0x110"], check=True)
+        deadline = time.time() + 8
+        while time.time() < deadline and len(find_kitty()) >= 3:
+            time.sleep(0.1)
+        ids = []
+        leaves(layout(), ids)
+        halves = [e for e in ids if near(e["geometry"], 8, 8, 628, 704)]
+        halves2 = [e for e in ids if near(e["geometry"], 644, 8, 628, 704)]
+        check("closing k3: workarea split 50/50 again (no 2/3 width)",
+              len(ids) == 2 and len(halves) == 1 and len(halves2) == 1,
+              json.dumps([e["geometry"] for e in ids]))
 else:
     check("spiral geometry skipped", False, "harvest incomplete")
 
