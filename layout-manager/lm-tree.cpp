@@ -7,6 +7,7 @@
  *   - animations/crossfade removed: geometries are committed directly
  *     through transactions (avoids interference with SSD frame margins) */
 #include "lm-tree.hpp"
+#include "lm-animator.hpp"
 #include "wayfire/core.hpp"
 #include "wayfire/geometry.hpp"
 #include "wayfire/toplevel-view.hpp"
@@ -349,9 +350,13 @@ void view_node_t::set_geometry(wf::geometry_t geometry, wf::txn::transaction_upt
     }
 
     wf::get_core().default_wm->update_last_windowed_geometry(view);
+    /* Capture the committed geometry BEFORE this transaction: that is
+     * what the user currently sees, i.e. the animation start point. */
+    auto from = view->get_geometry();
     view->toplevel()->pending().tiled_edges = wf::TILED_EDGES_ALL;
     view->toplevel()->pending().geometry    = calculate_target_geometry();
     tx->add_object(view->toplevel());
+    lm::layout_animator_t::get().animate(view, from);
 }
 
 wf::geometry_t view_node_t::target_geometry()

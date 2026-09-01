@@ -2,6 +2,44 @@
 
 *最新的排在最上面;越往下越旧(已通过的阶段沉底)。*
 
+## P4.5:tiling 几何动画(平滑滑动)— 待用户执行
+
+### 启动嵌套测试会话
+
+```bash
+cd ~/workspace/wm/wayfire-wm-plugins
+WAYFIRE_PLUGIN_PATH=$PWD/build/layout-manager:$PWD/build/ob-decor:$PWD/build/ob-menu \
+WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
+WLR_BACKENDS=wayland wayfire -c test/wayfire-layout-adaptive.ini -d
+```
+(默认动画 300ms;`animation_duration` 选项可调,0 = 关闭,改 ini 即时生效无需重启)
+
+### A-1 日常操作动画
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | `<super>T` 开新窗口 | 新窗与被分割的旧窗**平滑滑到**新位置(装饰一起飞),无瞬间跳变 |
+| 2 | 关闭一个窗口 | 邻居窗口平滑扩张补位 |
+| 3 | `<super>+Shift+Space` 浮动/收回 | 平滑浮出/滑回树内 |
+| 4 | 拖拽分割线/窗口边框 | **无动画**——几何实时跟手(松手即定位) |
+
+### A-2 模式切换与恢复
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 浮动布局按 `<super>+Shift+T` 收编 | 全部窗口从各自位置**同时平滑飞到**平铺位 |
+| 2 | 再按切回 stacking | 窗口平滑滑回收编前的原位置 |
+| 3 | 动画中再切换/再开关窗 | 从当前位置继续插值,不闪跳 |
+
+### A-3 禁用与时长
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | ini 改 `animation_duration = 0` 保存 | 立即回到瞬时切换(旧行为) |
+| 2 | 改回 `300` 或试 `150`/`500` | 时长即时生效 |
+
+---
+
 ## P4:adaptive 平铺样式 + 跟随鼠标焦点 — 待用户执行
 
 (tabbed/stacked 按用户决定取消;本节为替代的 P4 内容)

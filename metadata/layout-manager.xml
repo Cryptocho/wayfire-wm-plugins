@@ -24,6 +24,11 @@
 			<_long>While tiling (either layout style), moving the pointer into a tiled view focuses it. Floating views and the stacking mode are unaffected (click-to-focus there).</_long>
 			<default>false</default>
 		</option>
+		<option name="animation_duration" type="animation">
+			<_short>Geometry animation duration</_short>
+			<_long>Duration of the smooth geometry transitions (open/close/switch/float) in tiling mode. 0 = instant (no animation).</_long>
+			<default>300</default>
+		</option>
 		<option name="gaps_inner" type="int">
 			<_short>Inner gap (per side)</_short>
 			<_long>Gaps between tiled views, per side: the visual gap between two neighbors is 2x this value. Only applies in tiling mode.</_long>

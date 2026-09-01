@@ -30,6 +30,7 @@
 #include "lm-wset.hpp"
 #include "lm-float.hpp"
 #include "lm-ipc.hpp"
+#include "lm-animator.hpp"
 
 namespace lm
 {
@@ -313,6 +314,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             migrate_to_stacking();
         }
 
+        lm::layout_animator_t::get().cancel_all();
         unregister_ipc();
         outputs.fini_output_tracking();
         for (auto wset : wf::workspace_set_t::get_all())
@@ -375,6 +377,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             data.detach_views({node});
             st.floating = true;
 
+            auto from = view->get_geometry();
             wf::geometry_t target;
             if (st.has_saved)
             {
@@ -390,6 +393,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             view->toplevel()->pending().tiled_edges = 0;
             view->toplevel()->pending().geometry    = target;
             tx.tx->add_object(view->toplevel());
+            lm::layout_animator_t::get().animate(view, from);
             wf::get_core().seat->focus_view(view);
             LOGI("layout-manager: floated view ", view->get_id());
             return true;
@@ -592,10 +596,12 @@ class wayfire_layout_manager : public wf::plugin_interface_t
                 continue;
             }
 
+            std::vector<std::pair<wayfire_toplevel_view, wf::geometry_t>> anims;
             {
                 lm::autocommit_transaction_t tx;
                 for (auto v : views)
                 {
+                    auto from = v->get_geometry();
                     auto &st = lm_view_state_t::get(v);
                     v->toplevel()->pending().tiled_edges = 0;
                     if (st.has_pre)
@@ -604,7 +610,13 @@ class wayfire_layout_manager : public wf::plugin_interface_t
                     }
 
                     tx.tx->add_object(v->toplevel());
+                    anims.push_back({v, from});
                 }
+            }
+
+            for (auto& [v, from] : anims)
+            {
+                lm::layout_animator_t::get().animate(v, from);
             }
 
             std::vector<nonstd::observer_ptr<lm::view_node_t>> nodes;
@@ -649,6 +661,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             return;
         }
 
+        lm::layout_animator_t::get().cancel(toplevel);
         if (auto node = lm::view_node_t::get_node(ev->view))
         {
             wf::dassert(toplevel->get_wset() != nullptr);
