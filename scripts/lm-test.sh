@@ -97,6 +97,34 @@ if [ $STATUS -eq 0 ]; then
     STATUS=$?
 fi
 
+# --- phase 4: adaptive tiling style + focus-follows-mouse ------------------
+if [ $STATUS -eq 0 ]; then
+    kill "$WPID" 2>/dev/null && wait "$WPID" 2>/dev/null
+    rm -f "$SOCK"
+    echo "=== phase 4: adaptive tiling + follow-mouse ==="
+    _WAYFIRE_SOCKET="$SOCK" \
+    WAYFIRE_PLUGIN_PATH="$ROOT/build/layout-manager:$ROOT/build/ob-decor:$ROOT/build/ob-menu" \
+    WAYFIRE_PLUGIN_XML_PATH="$ROOT/metadata" \
+    WLR_BACKENDS=headless \
+    wayfire -c "$ROOT/test/wayfire-layout-adaptive.ini" -d >"$LOG" 2>&1 &
+    WPID=$!
+    echo "wayfire PID=$WPID"
+    for _ in $(seq 1 80); do
+        [ -S "$SOCK" ] && break
+        kill -0 "$WPID" 2>/dev/null || { echo "wayfire DIED during startup"; tail -20 "$LOG"; exit 1; }
+        sleep 0.1
+    done
+    WF_DISPLAY=""
+    for _ in $(seq 1 50); do
+        WF_DISPLAY=$(grep -oP "Using socket name \Kwayland-\d+" "$LOG" | tail -1)
+        [ -n "$WF_DISPLAY" ] && break
+        sleep 0.1
+    done
+    export WF_DISPLAY
+    python3 "$ROOT/scripts/lm-test-adaptive.py"
+    STATUS=$?
+fi
+
 if [ $STATUS -ne 0 ]; then
     echo "--- wayfire log tail ---"
     grep -E "EE|Fatal|SEGV" "$LOG" | tail -10

@@ -78,6 +78,12 @@ class lm_workspace_set_data_t : public wf::custom_data_t
 
     wf::option_wrapper_t<int> inner_gaps{"layout-manager/gaps_inner"};
     wf::option_wrapper_t<int> outer_gaps{"layout-manager/gaps_outer"};
+    wf::option_wrapper_t<std::string> tiling_style{"layout-manager/tiling_layout"};
+
+    bool adaptive_layout() const
+    {
+        return tiling_style.value() == "adaptive";
+    }
 
     /**
      * The last focused tiled view of this wset; new views are inserted as
@@ -378,6 +384,22 @@ class lm_workspace_set_data_t : public wf::custom_data_t
         auto view_node = setup_view_tiling(view, vp);
         auto& root     = roots[vp.x][vp.y];
         auto ref = after ? after : insertion_reference(root);
+
+        /* Adaptive style: the new view halves the FOCUSED view along its
+         * larger dimension (old keeps left/top, new takes right/bottom).
+         * The focused view must be isolated so that siblings do not
+         * shrink: wrap it in a fresh split (split_view changes a
+         * single-child parent's direction in place, which is equivalent),
+         * then the insert below adds the new view inside that wrapper. */
+        if (adaptive_layout() && ref && ref->as_view_node() && !after)
+        {
+            auto fv = ref->as_view_node()->view;
+            auto g  = fv->get_pending_geometry();
+            auto desired = (g.width >= g.height) ?
+                lm::SPLIT_VERTICAL : lm::SPLIT_HORIZONTAL;
+            split_view(fv, desired);
+        }
+
         if (ref && ref->parent)
         {
             /* insert as the next sibling of the reference */
@@ -400,6 +422,12 @@ class lm_workspace_set_data_t : public wf::custom_data_t
         }
 
         last_tiled_view = view;
+        if (adaptive_layout() && !after)
+        {
+            /* the spiral continues from the new view */
+            wf::get_core().seat->focus_view(view);
+        }
+
         consider_exit_fullscreen(view);
     }
 

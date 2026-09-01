@@ -2,6 +2,55 @@
 
 *最新的排在最上面;越往下越旧(已通过的阶段沉底)。*
 
+## P4:adaptive 平铺样式 + 跟随鼠标焦点 — 待用户执行
+
+(tabbed/stacked 按用户决定取消;本节为替代的 P4 内容)
+
+### 启动嵌套测试会话
+
+```bash
+cd ~/workspace/wm/wayfire-wm-plugins
+WAYFIRE_PLUGIN_PATH=$PWD/build/layout-manager:$PWD/build/ob-decor:$PWD/build/ob-menu \
+WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
+WLR_BACKENDS=wayland wayfire -c test/wayfire-layout-adaptive.ini -d
+```
+(配置已含 `tiling_layout = adaptive`、`focus_follows_mouse = true`、vswitch `<super>F1/F2`、root menu `<super>F3`)
+
+### T-1 adaptive 减半插入(螺旋)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 开窗口 1 | 占满工作区 |
+| 2 | 开窗口 2(焦点在窗口 1) | 宽>高 → 左右分:旧窗留左,新窗在右,**焦点给新窗** |
+| 3 | 开窗口 3(焦点在窗口 2) | 窗口 2 现在窄了,高>宽 → 上下分:窗口 2 留上,窗口 3 在下 |
+| 4 | 继续开窗口 4、5… | 不断分割焦点窗的最大边,越分越接近正方形(收缩螺旋) |
+| 5 | 关闭中间任一窗口 | 空间被其"对半伙伴"收回,其余不动 |
+
+### T-2 adaptive 与既有功能交互
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | adaptive 下切到 stacking 再切回 | 收编按行主序重建螺旋;切回浮动恢复原几何(与 tiling 一致) |
+| 2 | `<super>+Shift+Space` 浮动某窗 | 与 tiling 相同:浮出/收回,几何记忆 |
+| 3 | 边框/缝隙拖拽 | 照常工作(被分割的伙伴联动) |
+| 4 | client-menu → Fullscreen | 照常 |
+
+### T-3 focus_follows_mouse(此 ini 已开启)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 鼠标在平铺窗口间移动 | 焦点跟到光标所在窗口(标题栏高亮 active 态切换) |
+| 2 | 鼠标移到浮动窗上 | **不**跟随(浮动窗仍点击聚焦) |
+| 3 | 切到 stacking 模式 | 跟随完全关闭(原生行为) |
+| 4 | ini 中 `focus_follows_mouse = false` 重启 | 跟随关闭,回到点击聚焦 |
+
+### 已知未实现(勿报 bug)
+
+- adaptive 收编(从 stacking 切入)按行主序逐个走减半链,布局可能与手动逐个开窗不同(算法决定的,正常)
+- `tiling_layout` 运行时改选项即时生效,但已建好的树不重排(下次插入生效);想立刻应用请切换一次模式
+
+---
+
 ## P3:layout-manager(全局布局模式:sway H/V tiling ↔ stacking)— 待用户执行
 
 ### 启动嵌套测试会话

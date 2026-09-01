@@ -292,6 +292,7 @@ class wayfire_layout_manager : public wf::plugin_interface_t
         wf::get_core().connect(&on_view_moved_to_wset);
         wf::get_core().connect(&on_divider_button);
         wf::get_core().connect(&on_divider_motion);
+        wf::get_core().connect(&on_follow_mouse_motion);
 
         register_ipc();
         LOGI("layout-manager init: mode=", mode_name(mode));
@@ -481,6 +482,9 @@ class wayfire_layout_manager : public wf::plugin_interface_t
      * when the option is non-empty (an empty matcher string fails to
      * parse and would spam the log). */
     std::unique_ptr<wf::view_matcher_t> float_matcher;
+
+    /* focus-follows-mouse for tiled views (tiling mode only) */
+    wf::option_wrapper_t<bool> follow_mouse{"layout-manager/focus_follows_mouse"};
 
     /* Collect all currently mapped views of every workspace set into their
      * workspace's tiling tree. */
@@ -913,6 +917,38 @@ class wayfire_layout_manager : public wf::plugin_interface_t
 
         dragging->drag_motion_raw(ev->event->delta_x, ev->event->delta_y);
         ev->mode = wf::input_event_processing_mode_t::IGNORE;
+    };
+
+    /* Focus-follows-mouse for tiled views: when the pointer moves over a
+     * tiled view (either tiling style), focus it. Only in tiling mode and
+     * only for tiled views — floating/stacking stay click-to-focus.
+     * Uses the POST-event signal: the pre-event signal fires before
+     * wayfire updates the cursor focus, so get_cursor_focus_view() would
+     * lag one event behind. */
+    wf::signal::connection_t<wf::post_input_event_signal<wlr_pointer_motion_event>>
+    on_follow_mouse_motion = [=] (wf::post_input_event_signal<wlr_pointer_motion_event> *ev)
+    {
+        if (!follow_mouse || !is_tiling())
+        {
+            return;
+        }
+
+        if (outputs.find_active_drag())
+        {
+            return;
+        }
+
+        auto focus = wf::toplevel_cast(wf::get_core().get_cursor_focus_view());
+        if (!focus || !lm::view_node_t::get_node(focus))
+        {
+            return; /* floating view / decoration-less gap: untouched */
+        }
+
+        auto active = wf::toplevel_cast(wf::get_core().seat->get_active_view());
+        if (active != focus)
+        {
+            wf::get_core().seat->focus_view(focus);
+        }
     };
 
     /* ---- outputs & IPC ---- */

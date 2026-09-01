@@ -14,6 +14,16 @@
 			<_long>Split direction of each workspace's tiling root: "auto" (vertical root when the workarea is taller than wide, horizontal otherwise — sway semantics), "h" or "v".</_long>
 			<default>auto</default>
 		</option>
+		<option name="tiling_layout" type="string">
+			<_short>Tiling layout style</_short>
+			<_long>"sway": new views are inserted as the sibling after the focused view (P3 behavior). "adaptive": every new view halves the focused view along its larger dimension (old keeps left/top, the new view takes right/bottom and the focus), producing a shrinking spiral.</_long>
+			<default>sway</default>
+		</option>
+		<option name="focus_follows_mouse" type="bool">
+			<_short>Focus follows mouse (tiled views)</_short>
+			<_long>While tiling (either layout style), moving the pointer into a tiled view focuses it. Floating views and the stacking mode are unaffected (click-to-focus there).</_long>
+			<default>false</default>
+		</option>
 		<option name="gaps_inner" type="int">
 			<_short>Inner gap (per side)</_short>
 			<_long>Gaps between tiled views, per side: the visual gap between two neighbors is 2x this value. Only applies in tiling mode.</_long>
