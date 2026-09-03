@@ -54,7 +54,7 @@ WLR_BACKENDS=wayland wayfire -c test/wayfire-switcher.ini -d
 
 ---
 
-## P4.5:tiling 几何动画(平滑滑动)— 待用户执行
+## P4.5:tiling 几何动画(平滑滑动)(已全部通过,2026-09-04)
 
 ### 启动嵌套测试会话
 
