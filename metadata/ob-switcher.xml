@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="ob-switcher">
+		<_short>Openbox Window Switcher</_short>
+		<_long>fast-switcher behavior plus a labwc-style window-switcher OSD themed by themerc osd.* keys.</_long>
+		<category>Window Management</category>
+		<option name="activate" type="activator">
+			<_short>Activate switcher (forward)</_short>
+			<_long>Open/step the switcher forward. Hold the modifier and press again to step; release to select. Alt+Tab (labwc default) — super+Tab belongs to the stock fast-switcher.</_long>
+			<default>&lt;alt&gt; KEY_TAB</default>
+		</option>
+		<option name="activate_backward" type="activator">
+			<_short>Activate switcher (backward)</_short>
+			<_long>Open/step the switcher in the opposite direction.</_long>
+			<default>&lt;alt&gt;&lt;shift&gt; KEY_TAB</default>
+		</option>
+		<option name="inactive_alpha" type="double">
+			<_short>Inactive alpha</_short>
+			<_long>Opacity of the non-selected windows while the switcher is open (1.0 disables dimming).</_long>
+			<default>0.55</default>
+		</option>
+		<option name="osd_show" type="bool">
+			<_short>Show OSD</_short>
+			<_long>Show the labwc-style window list OSD while switching.</_long>
+			<default>true</default>
+		</option>
+	</plugin>
+</wayfire>
