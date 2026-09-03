@@ -1,6 +1,7 @@
 #include "deco-theme.hpp"
 #include <wayfire/opengl.hpp>
 #include <wayfire/debug.hpp>
+#include <wayfire/core.hpp>
 #include <pango/pangocairo.h>
 #include <algorithm>
 #include <map>
@@ -11,13 +12,23 @@ namespace odecor
 {
 decoration_theme_t::decoration_theme_t()
 {
-    /* The vendored theme engine keeps colors/layouts in ONE global rc
-     * shim: only one theme instance may exist per process, and each
-     * decorated view constructs a decoration_theme_t. Reusing the live
-     * instance (first consumer initializes it) is what keeps every view
-     * consistent; the old per-view init + finish pair nulled rc.theme on
-     * the first destructor and crashed hover rendering on the rest. */
-    ob = ob_theme_current();
+    /* Theme source order: ob-theme provider (owns the singleton) →
+     * ob_theme_current() → lazy init fallback (idempotent first-wins,
+     * provider absent). The vendored theme engine keeps colors/layouts
+     * in ONE global rc shim: only one theme instance may exist per
+     * process, and each decorated view constructs a decoration_theme_t.
+     * The old per-view init + finish pair nulled rc.theme on the first
+     * destructor and crashed hover rendering on the rest. */
+    if (auto data = wf::get_core().get_data<obtheme::ob_theme_data_t>(
+        "ob-theme"))
+    {
+        ob = data->theme;
+    }
+    else
+    {
+        ob = ob_theme_current();
+    }
+
     if (!ob)
     {
         struct ob_theme_config cfg = {};
@@ -29,6 +40,32 @@ decoration_theme_t::decoration_theme_t()
         cfg.titlebar_layout = lay.c_str();
         ob_theme_init(&ob, cfg);
     }
+}
+
+/* False exactly once per in-place reload (ob-theme provider bumps the
+ * epoch); adopts the new baseline so subsequent calls are true again —
+ * callers rebuild their caches on false. */
+bool decoration_theme_t::epoch_valid() const
+{
+    uint32_t e = 0;
+    if (auto data = wf::get_core().get_data<obtheme::ob_theme_data_t>(
+        DATA_NAME))
+    {
+        e = data->epoch;
+    }
+
+    if (epoch_seen_ == UINT32_MAX)
+    {
+        epoch_seen_ = e;
+    }
+
+    if (e != epoch_seen_)
+    {
+        epoch_seen_ = e;
+        return false;
+    }
+
+    return true;
 }
 
 decoration_theme_t::~decoration_theme_t()
@@ -65,7 +102,10 @@ void decoration_theme_t::ensure_fill_texture(int active) const
         return;
     }
 
-    if ((fill_src[active] != surf) ||
+    /* fill_src pointer comparison also catches reloads (theme_finish
+     * rebuilds the cairo surface), but the pointer value can be reused
+     * by the allocator after a free — the epoch check is authoritative. */
+    if (!epoch_valid() || (fill_src[active] != surf) ||
         !fill_tex[active].get_texture().texture)
     {
         fill_tex[active] = wf::owned_texture_t{surf};
@@ -149,17 +189,14 @@ wf::texture_t decoration_theme_t::get_button_texture(
     enum lab_node_type type, unsigned bits, int active) const
 {
     static wf::texture_t empty;
-    LOGE("btn-tex enter type=", (int)type, " bits=", bits);
     int bw, bh, bs;
     get_button_size(&bw, &bh, &bs);
-    LOGE("btn-tex size=", bw, "x", bh);
     const int key = ((int)type << 8) | ((int)(bits & 3) << 1) | (active & 1);
     auto it = button_tex_cache.find(key);
-    if (it == button_tex_cache.end())
+    if (!epoch_valid() || (it == button_tex_cache.end()))
     {
         auto *surf = ob_theme_render_button(ob, type, bits, active, bw, bh,
             1.0);
-        LOGE("btn-tex surf=", (void*)surf);
         if (!surf)
         {
             return empty;

@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="ob-theme">
+		<_short>Openbox Theme Provider</_short>
+		<_long>Owns the single openbox (themerc) theme instance shared by ob-decor, ob-menu and ob-switcher. Load it first for deterministic theming; consumers also work without it (lazy fallback).</_long>
+		<category>Utility</category>
+		<option name="theme_name" type="string">
+			<_short>Theme name</_short>
+			<_long>Openbox theme searched in ~/.themes and XDG data dirs (labwc semantics). Empty falls back to ob-decor/theme, then built-in defaults.</_long>
+			<default></default>
+		</option>
+		<option name="font" type="string">
+			<_short>Base font</_short>
+			<_long>Pango font description used when the per-place fonts below are empty. Empty inherits the libobtheme default (sans 10).</_long>
+			<default></default>
+		</option>
+		<option name="font_menuitem" type="string">
+			<_short>Menu item font</_short>
+			<_long>Empty value inherits ob-theme/font.</_long>
+			<default></default>
+		</option>
+		<option name="font_menuheader" type="string">
+			<_short>Menu header font</_short>
+			<_long>Empty value inherits ob-theme/font.</_long>
+			<default></default>
+		</option>
+		<option name="font_osd" type="string">
+			<_short>OSD font</_short>
+			<_long>Pango font for switcher/menu OSD text (labwc &lt;font place="OSD"&gt; spirit). Empty inherits ob-theme/font.</_long>
+			<default></default>
+		</option>
+	</plugin>
+</wayfire>

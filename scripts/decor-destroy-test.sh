@@ -15,6 +15,12 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 : "${XDG_RUNTIME_DIR:?"run from a user session (XDG_RUNTIME_DIR required)"}"
 
+# Optional provider co-load: EXTRA_PLUGIN_PATH=.../build/ob-theme plus a
+# TEST_INI whose plugins line contains ob-theme exercise the provider
+# path; the defaults keep exercising the provider-absent fallback path.
+TEST_INI="${TEST_INI:-$ROOT/test/wayfire-menu-interactive.ini}"
+EXTRA_PLUGIN_PATH="${EXTRA_PLUGIN_PATH:-}"
+
 LOG=/tmp/obmenu-decor-destroy.log
 WPID=""; KPID1=""; KPID2=""
 SOCK="$XDG_RUNTIME_DIR/wayfire-decor-destroy-test.sock"
@@ -31,10 +37,10 @@ export SOCK
 
 echo "=== starting headless wayfire (ob-decor + ob-menu co-load) ==="
 _WAYFIRE_SOCKET="$SOCK" \
-WAYFIRE_PLUGIN_PATH="$ROOT/build/ob-decor:$ROOT/build/ob-menu" \
+WAYFIRE_PLUGIN_PATH="${EXTRA_PLUGIN_PATH:+$EXTRA_PLUGIN_PATH:}$ROOT/build/ob-decor:$ROOT/build/ob-menu" \
 WAYFIRE_PLUGIN_XML_PATH="$ROOT/metadata" \
 WLR_BACKENDS=headless \
-wayfire -c "$ROOT/test/wayfire-menu-interactive.ini" -d >"$LOG" 2>&1 &
+wayfire -c "$TEST_INI" -d >"$LOG" 2>&1 &
 WPID=$!
 echo "wayfire PID=$WPID"
 

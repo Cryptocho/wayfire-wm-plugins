@@ -4,7 +4,9 @@
 #include <wayfire/config/types.hpp>
 #include "deco-button.hpp"
 #include <map>
+#include <cstdint>
 #include <obtheme.h>
+#include "../ob-theme/ob-theme-data.hpp"
 
 namespace wf
 {
@@ -63,6 +65,13 @@ class decoration_theme_t
 
   private:
     struct theme *ob = nullptr;
+
+    /* ob-theme provider linkage: borrowed singleton pointer + in-place
+     * reload detection. ob_theme_reinit() reparses the SAME struct, so
+     * @ob stays valid; texture caches must drop on epoch change. */
+    bool epoch_valid() const; /* false exactly once per reload */
+    mutable uint32_t epoch_seen_ = UINT32_MAX;
+    static constexpr const char *DATA_NAME = "ob-theme";
 
     wf::option_wrapper_t<std::string> theme_name{"ob-decor/theme"};
     wf::option_wrapper_t<std::string> font{"ob-decor/font"};

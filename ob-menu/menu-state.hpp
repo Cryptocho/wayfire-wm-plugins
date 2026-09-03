@@ -7,6 +7,10 @@
 
 #include <obtheme.h>
 
+#include <wayfire/core.hpp>
+
+#include "../ob-theme/ob-theme-data.hpp"
+
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -59,15 +63,23 @@ struct MenuState
         initialized = true;
     }
 
-    /* The vendored theme engine keeps colors/layouts in ONE global rc
-     * shim: only a single theme instance may exist per process, and its
-     * consumers initialize lazily (ob-menu at plugin init, ob-decor when
-     * the first view gets decorated). Always read the live instance so
-     * the menu follows the most recently initialized theme (typically
-     * ob-decor's themerc, e.g. the menu highlight color); if nobody has
-     * initialized one yet, build our own from the ob-menu options. */
+    /* Theme source order: ob-theme provider (owns the singleton; reading
+     * through it also follows in-place reloads automatically) →
+     * ob_theme_current() → lazy fallback init from the ob-menu options
+     * (idempotent first-wins, provider absent). Render paths call this
+     * every frame, so reloads are picked up without notification wiring
+     * on the menu side. */
     struct theme *theme()
     {
+        if (auto data =
+                wf::get_core().get_data<obtheme::ob_theme_data_t>("ob-theme"))
+        {
+            if (data->theme)
+            {
+                return data->theme;
+            }
+        }
+
         if (auto *t = ob_theme_current())
         {
             return t;
