@@ -1,1 +1,17 @@
+# build artifacts
 build/
+build-*/
+
+# python test tooling
+__pycache__/
+*.pyc
+
+# test run leftovers
+*.log
+/tmp/
+
+# editor
+*.swp
+*.swo
+.idea/
+.vscode/
