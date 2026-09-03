@@ -44,16 +44,27 @@ struct ob_theme_config {
 };
 
 /* Initialize `rc` shims + parse the theme. Returns 0 on success.
- * NOTE: the vendored theme code reads colors/layouts from the GLOBAL rc
- * shim, so only ONE theme instance may exist per process. Later callers
- * that only need menu/dimension accessors should reuse ob_theme_current()
- * instead of initializing a second theme (a second init repoints rc.theme
- * and crashes the first consumer's hover rendering). */
+ * IDEMPOTENT first-wins: the vendored theme code reads colors/layouts
+ * from the GLOBAL rc shim, so exactly one live instance exists per
+ * process. Callers that arrive after the first init get a pointer to
+ * that instance and their config is ignored (logged). Provider-less
+ * setups rely on this: whichever consumer runs first initializes.
+ * A dedicated ob-theme provider plugin should normally own the call. */
 int ob_theme_init(struct theme **out, struct ob_theme_config cfg);
 
 /* The most recently initialized theme (NULL before the first init).
- * Borrowed pointer; shared between ob-decor and ob-menu. */
+ * Borrowed pointer; shared between all consumers. */
 struct theme *ob_theme_current(void);
+
+/* Theme name the live singleton was actually parsed with ("" = built-in
+ * labwc defaults). Useful to report which config won the first-wins race. */
+const char *ob_theme_parsed_theme_name(void);
+
+/* In-place reload of the live singleton (theme_finish + reparse into the
+ * SAME struct; borrowed pointers stay valid). Returns 0 on success,
+ * -1 if no theme was initialized yet. Hot-reload path of the ob-theme
+ * provider plugin; consumers must re-render on ob_theme_reloaded. */
+int ob_theme_reinit(struct ob_theme_config cfg);
 
 /* Free all theme resources (labwc theme_finish + rc strings). */
 void ob_theme_finish(struct theme *theme);
@@ -256,6 +267,79 @@ static inline enum lab_justification ob_theme_menu_items_justify(
 	const struct theme *t)
 {
 	return t->menu_items_text_justify;
+}
+
+/* ---- OSD / window-switcher theme accessors (themerc osd.* +
+ * window_switcher.* keys, parsed by the vendored engine; labwc cycle
+ * OSD semantics) ---- */
+static inline int ob_theme_osd_border_width(const struct theme *t)
+{
+	return t->osd_border_width;
+}
+
+static inline const float *ob_theme_osd_bg(const struct theme *t)
+{
+	return t->osd_bg_color;
+}
+
+static inline const float *ob_theme_osd_border_color(const struct theme *t)
+{
+	return t->osd_border_color;
+}
+
+static inline const float *ob_theme_osd_label_text_color(
+	const struct theme *t)
+{
+	return t->osd_label_text_color;
+}
+
+static inline int ob_theme_switcher_width(const struct theme *t)
+{
+	return t->osd_window_switcher_classic.width;
+}
+
+/* 1 = classic.width is a percentage of the output width */
+static inline bool ob_theme_switcher_width_is_percent(const struct theme *t)
+{
+	return t->osd_window_switcher_classic.width_is_percent;
+}
+
+static inline int ob_theme_switcher_padding(const struct theme *t)
+{
+	return t->osd_window_switcher_classic.padding;
+}
+
+static inline int ob_theme_switcher_item_padding_x(const struct theme *t)
+{
+	return t->osd_window_switcher_classic.item_padding_x;
+}
+
+static inline int ob_theme_switcher_item_padding_y(const struct theme *t)
+{
+	return t->osd_window_switcher_classic.item_padding_y;
+}
+
+static inline int ob_theme_switcher_item_active_border_width(
+	const struct theme *t)
+{
+	return t->osd_window_switcher_classic.item_active_border_width;
+}
+
+static inline const float *ob_theme_switcher_item_active_border_color(
+	const struct theme *t)
+{
+	return t->osd_window_switcher_classic.item_active_border_color;
+}
+
+static inline const float *ob_theme_switcher_item_active_bg(
+	const struct theme *t)
+{
+	return t->osd_window_switcher_classic.item_active_bg_color;
+}
+
+static inline int ob_theme_switcher_item_icon_size(const struct theme *t)
+{
+	return t->osd_window_switcher_classic.item_icon_size;
 }
 
 /* Width (px) reserved on the left of an item row for the submenu

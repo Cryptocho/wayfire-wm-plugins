@@ -19,6 +19,15 @@
 #include "img/img.h"
 #include <wlr/util/log.h>
 
+/* The shared library builds with hidden symbol visibility; these are the
+ * only exported entry points. The attribute must precede the declaration
+ * specifiers — appended after a pointer return type it does not bind. */
+#if defined(__GNUC__)
+#define OBTHEME_API __attribute__((visibility("default")))
+#else
+#define OBTHEME_API
+#endif
+
 struct rcxml rc;
 
 /* Parse labwc titlebar-layout syntax into rc.title_buttons_*.
@@ -146,17 +155,12 @@ static void set_fonts(const char *titlebar, const char *menuitem,
 	pango_font_description_free(mh);
 }
 
-int ob_theme_init(struct theme **out, struct ob_theme_config cfg)
+/* Populate the rcxml shim (labwc reads these from rc.xml) and parse the
+ * theme into `theme`. Shared by ob_theme_init (fresh instance) and
+ * ob_theme_reinit (in-place reload). */
+static int fill_rc_and_parse(struct theme *theme,
+	struct ob_theme_config cfg)
 {
-	if (!out) {
-		return -1;
-	}
-
-	struct theme *theme = calloc(1, sizeof(*theme));
-	if (!theme) {
-		return -1;
-	}
-
 	/* Populate the rcxml shim (labwc reads these from rc.xml). */
 	free(rc.theme_name);
 	free(rc.config_dir);
@@ -168,24 +172,70 @@ int ob_theme_init(struct theme **out, struct ob_theme_config cfg)
 	parse_titlebar_layout(cfg.titlebar_layout);
 	set_fonts(cfg.font, cfg.font_menuitem, cfg.font_menuheader);
 
-	rc.theme = theme;
-
 	/* rc.theme_name == "" keeps theme_name NULL → built-in defaults. */
 	theme_init(theme, *rc.theme_name ? rc.theme_name : NULL);
-	if (!rc.merge_config) {
-		/* single-read semantics are handled inside theme_read */
+	return 0;
+}
+
+OBTHEME_API int ob_theme_init(struct theme **out, struct ob_theme_config cfg)
+{
+	if (!out) {
+		return -1;
 	}
+
+	/* Idempotent first-wins: the vendored theme code reads colors/
+	 * layouts from the ONE global rc shim, so a second live instance
+	 * would repoint rc.theme and leave the first consumer's borrowed
+	 * pointer dangling (observed as hover-rendering crashes). Every
+	 * later call therefore reuses the existing instance and ignores
+	 * its config (logged). */
+	if (rc.theme) {
+		wlr_log(WLR_INFO, "theme already initialized, ignoring new "
+			"config (theme_name='%s')", cfg.theme_name ? cfg.theme_name : "");
+		*out = rc.theme;
+		return 0;
+	}
+
+	struct theme *theme = calloc(1, sizeof(*theme));
+	if (!theme) {
+		return -1;
+	}
+
+	rc.theme = theme;
+	fill_rc_and_parse(theme, cfg);
 
 	*out = theme;
 	return 0;
 }
 
-struct theme *ob_theme_current(void)
+OBTHEME_API struct theme *ob_theme_current(void)
 {
 	return rc.theme;
 }
 
-void ob_theme_finish(struct theme *theme)
+/* The theme name the live singleton was actually parsed with (rc shim
+ * state; may differ from a later caller's config when first-wins hit).
+ * "" = built-in labwc defaults. */
+OBTHEME_API const char *ob_theme_parsed_theme_name(void)
+{
+	return rc.theme_name ? rc.theme_name : "";
+}
+
+/* In-place reload of the live singleton (labwc reconfigure semantics:
+ * theme_finish + reparse into the SAME struct, so borrowed pointers stay
+ * valid). Returns 0 on success, -1 if no theme was initialized yet. */
+OBTHEME_API int ob_theme_reinit(struct ob_theme_config cfg)
+{
+	if (!rc.theme) {
+		return -1;
+	}
+
+	theme_finish(rc.theme);
+	fill_rc_and_parse(rc.theme, cfg);
+	return 0;
+}
+
+OBTHEME_API void ob_theme_finish(struct theme *theme)
 {
 	if (!theme) {
 		return;
@@ -196,7 +246,7 @@ void ob_theme_finish(struct theme *theme)
 	free(theme);
 }
 
-int ob_theme_font_height(int place)
+OBTHEME_API int ob_theme_font_height(int place)
 {
 	struct font *font = &rc.font_menuitem;
 	if (place == OB_FONT_MENUHEADER)
@@ -211,7 +261,7 @@ int ob_theme_font_height(int place)
 	return font_height(font);
 }
 
-const char *ob_theme_font_string(int place)
+OBTHEME_API const char *ob_theme_font_string(int place)
 {
 	static char buf[128];
 	struct font *font = &rc.font_menuitem;
@@ -232,7 +282,7 @@ const char *ob_theme_font_string(int place)
 	return buf;
 }
 
-int ob_theme_title_buttons(const struct theme *t, int side,
+OBTHEME_API int ob_theme_title_buttons(const struct theme *t, int side,
 	enum lab_node_type *out, int max)
 {
 	(void)t; /* buttons live in the rc shim, populated at ob_theme_init */
@@ -253,7 +303,7 @@ int ob_theme_title_buttons(const struct theme *t, int side,
 	return nr;
 }
 
-cairo_surface_t *ob_theme_render_button(struct theme *theme,
+OBTHEME_API cairo_surface_t *ob_theme_render_button(struct theme *theme,
 	enum lab_node_type type, unsigned state_bits, int active,
 	int width, int height, double scale)
 {

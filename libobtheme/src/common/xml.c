@@ -92,7 +92,9 @@ merge_two_trees(xmlNode *dst, xmlNode *src)
 	return merged;
 }
 
-void
+/* Exported: consumed by ob-menu's menu parser (the library builds with
+ * hidden symbol visibility; see VENDORED-DIFFS.md). */
+__attribute__((visibility("default"))) void
 lab_xml_expand_dotted_attributes(xmlNode *parent)
 {
 	xmlNode *old_first_child = parent->children;

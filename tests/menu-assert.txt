@@ -4,11 +4,12 @@ menus_total = 9
 
 # client-menu: first defined, plain items
 menu.client-menu.exists = true
-menu.client-menu.items = 3
+menu.client-menu.items = 4
 menu.client-menu.item.0.text = Minimize
 menu.client-menu.item.0.actions = Iconify
 menu.client-menu.item.1.actions = ToggleMaximize
 menu.client-menu.item.2.actions = Close
+menu.client-menu.item.3.actions = ToggleFullscreen
 
 # root-menu: item, separator, submenu refs, pipemenu def, titled separator
 menu.root-menu.exists = true

@@ -37,6 +37,12 @@ diffs below.
 ### include/common/xml.h
 1. Added `extern "C"` guards (header is consumed from C++ by ob-menu).
 
+### src/common/xml.c
+1. `lab_xml_expand_dotted_attributes()`: added
+   `__attribute__((visibility("default")))` — the library builds as a
+   shared lib with `gnu_symbol_visibility: hidden`, and ob-menu's parser
+   consumes this helper, so it must stay exported.
+
 ### src/img/img.c
 1. Includes: removed `labwc.h`.
 2. `img_destroy()`: `wlr_buffer_drop(&img->data->buffer->base)` →
