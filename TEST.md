@@ -2,6 +2,58 @@
 
 *最新的排在最上面;越往下越旧(已通过的阶段沉底)。*
 
+## P6:ob-theme 主题 provider + ob-switcher(主题化窗口切换 OSD)(已全部通过,2026-09-04)
+
+背景:ob-theme 插件统一持有 openbox 主题(ob-decor/ob-menu/ob-switcher 都跟随它,provider 缺席时各插件仍能用旧 fallback);ob-switcher = fast-switcher 复制 + labwc 式 OSD,主题色取 themerc 的 `osd.*` / `window_switcher.*` 键。自动化已全绿(ob-theme provider 状态/reload、switcher 正反向/Esc 取消/OSD 生命周期,共 17 断言),本节验证**视觉与真实交互**。
+
+### 启动嵌套测试会话
+
+```bash
+cd ~/workspace/wm/wayfire-wm-plugins
+WAYFIRE_PLUGIN_PATH=$PWD/build/ob-theme:$PWD/build/ob-switcher:$PWD/build/ob-decor:$PWD/build/ob-menu:$PWD/build/layout-manager \
+WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
+WLR_BACKENDS=wayland wayfire -c test/wayfire-switcher.ini -d
+```
+(test/wayfire-switcher.ini 的 plugins 行含全部五插件:ob-theme + ob-switcher + ob-decor + ob-menu + layout-manager(S-4 需要),另有 move/resize 供标题栏拖动;用 `<super>T` 多开几个窗口;主题 OB-Arc-Dark。想换主题:ini `[ob-theme] theme_name` 改成 `~/.themes` 下任意主题,重启会话即可)
+
+### S-1 OSD 基本外观(主题化)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | `<alt>+Tab` 按住 | 屏幕**中央**出现 OSD 面板:主题 `osd.bg.color` 底、`osd.border.color` 边框;每行 = 图标占位块(应用首字母)+ app_id + 标题 |
+| 2 | 选中行观察 | 高亮 = 主题 `window_switcher.item.active.bg.color` 底 + `item.active.border.color` 边框,宽度铺满行 |
+| 3 | 松开 `<alt>` | OSD 消失,焦点落到选中行窗口,窗口激活态(装饰 active 色) |
+
+### S-2 切换行为(labwc 语义)
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | 按住 `<alt>` 连按 Tab | 高亮行每次移到下一窗口,非选中窗口变半透明(`inactive_alpha`),装饰切 inactive |
+| 2 | 加 Shift 再按 Tab | 高亮反向移动 |
+| 3 | 按住期间按 `Esc` | OSD 消失、**焦点不变**,所有窗口恢复原透明度/激活态 |
+| 4 | OSD 可见时鼠标点击另一行 | 焦点立即切到该行窗口,OSD 关闭 |
+| 5 | 只有一个窗口时 `<alt>+Tab` | 无 OSD(候选集为空不做任何事) |
+
+### S-3 主题跟随 provider
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | ob-theme 在场(上面会话) | ob-decor 标题栏、ob-menu 菜单、ob-switcher OSD 三者颜色一致(同一主题实例) |
+| 2 | 注释 plugins 行里的 `ob-theme` 重启会话 | 三者仍正常(fallback 路径):ob-decor/ob-menu 各自懒初始化,OSD 主题色仍生效 |
+| 3 | ob-theme 不在场且窗口未出现前开菜单? | 跳过——直接验证:无 ob-theme 会话中 OSD 颜色与 ob-decor 装饰色一致即可 |
+
+### S-4 与其他插件共处
+
+| 步骤 | 操作 | 预期 |
+|---|---|---|
+| 1 | tiling 模式(`<super>+Shift+T` 收编)后 `<alt>+Tab` | OSD 列出平铺窗口,切换正常 |
+| 2 | 切换器开着时开右键菜单(ob-decor 标题栏右键) | 切换器与菜单不叠加输入混乱(顺序行为,允许一个先关) |
+| 3 | 切换期间关闭一个候选窗口 | 候选列表收缩,不崩溃,选中项回退正常(自动化已覆盖,视觉复核) |
+
+已知差异(与 labwc 对齐项,见计划):无窗口实时预览(preview)与轮廓(outlines)——它们是 labwc cycle 的 reparent 手法,列为后续;OSD 超 12 行截断(无滚动条);图标为占位块(libsfdo 图标为后续)。
+
+---
+
 ## P4.5:tiling 几何动画(平滑滑动)— 待用户执行
 
 ### 启动嵌套测试会话

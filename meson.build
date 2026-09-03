@@ -26,6 +26,9 @@ libobtheme_dep = declare_dependency(
 )
 
 subdir('proto-pan')
+# ob-theme before its consumers (provider owns ob_theme_init; loading
+# order in wayfire.ini decides at runtime, repo order is documentation).
+subdir('ob-theme')
 subdir('ob-decor')
 
 # T1 linkage check: obtheme.h consumable from C++.
@@ -75,3 +78,6 @@ subdir('ob-menu')
 
 # P3: layout-manager (global layout mode switching).
 subdir('layout-manager')
+
+# P5: ob-switcher (fast-switcher + themerc-themed window-switcher OSD).
+subdir('ob-switcher')
