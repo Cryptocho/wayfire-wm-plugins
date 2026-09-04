@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<wayfire>
+	<plugin name="ext-workspace">
+		<_short>Ext Workspace protocol</_short>
+		<_long>Exposes workspace state and switching to clients (taskbars/docks) via the ext-workspace-v1 protocol. Each workspace set maps to a workspace group; every grid cell is a workspace with [x, y] coordinates. Only the active state and the activate request are supported.</_long>
+		<category>Protocols</category>
+	</plugin>
+</wayfire>

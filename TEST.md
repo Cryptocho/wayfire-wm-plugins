@@ -2,6 +2,51 @@
 
 *最新的排在最上面;越往下越旧(已通过的阶段沉底)。*
 
+## P7:ext-workspace(ext_workspace_v1 协议 server 侧)(自动化全绿,交互验证待用户)
+
+背景:out-of-tree 插件 `ext-workspace` 向任务栏/dock 暴露工作区状态(ext-workspace-v1,version 1)。映射:工作区组↔wset(1:1)、工作区↔网格 cell(coordinates=[x,y],name=行主序 1-based "1".."N");state 只发 `active`;capabilities 只声明 `activate`;activate 请求走 `workspace_change_request_signal`(vswitch 同款接入点,无人处理才直接 set_workspace)。urgent/id/动态建组均 deferred(wayfire 0.10 core 无 urgent 概念;协议允许不声明能力)。自动化已全绿(scripts/ext-workspace-test.sh,A–E 五段):初始状态流(group→details→done 时序)、activate 请求端到端、多客户端独立广播、stop→finished、IPC get-state 与协议视图一致。客户端生态:waybar ≥0.14.0 的 workspaces 模块已移植到 ext-workspace-v1。
+
+### 启动嵌套测试会话(给 waybar 连接)
+
+```bash
+cd ~/workspace/wm/wayfire-wm-plugins
+WAYFIRE_PLUGIN_PATH=$PWD/build/ext-workspace \
+WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
+WLR_BACKENDS=wayland wayfire -c test/wayfire-ext-workspace.ini -d
+# 另一个终端,连接嵌套会话(socket 名见 wayfire 日志,如 wayland-3):
+WAYLAND_DISPLAY=wayland-3 waybar -c <测试用 waybar 配置>
+# 或先跑最小客户端看事件流(不画任何 UI):
+WAYLAND_DISPLAY=wayland-3 build-ew/ext-workspace/ext-workspace-client --expect-groups 1
+```
+
+(test/wayfire-ext-workspace.ini:plugins=command ipc ext-workspace,vwidth=vheight=2;按惯例配齐 `<super>T`=kitty)
+
+### W-1 waybar 显示工作区(需要 waybar ≥0.14.0)
+
+waybar 配置里加 ext-workspace 模块(0.14 从 wlr/workspaces 移植而来,模块名 `ext/workspaces`;配置键若与下述不同以 waybar 0.14 文档为准):
+
+```json
+"modules-left": ["ext/workspaces"],
+"ext/workspaces": { "format": "{name}", "on-click": "activate" }
+```
+
+预期:任务栏出现 4 个工作区按钮(1..4),"1"高亮;`<super><shift>2`(vswitch)切到 2 后"2"高亮。
+
+### W-2 通过 waybar 点击切换工作区
+
+预期:点击"3"→ 工作区切换(若 wayfire 会话加载了 vswitch 则带动画)→ waybar 高亮跟到"3"。这验证 **activate 请求的端到端闭环**(协议请求 → workspace_change_request_signal → 切换 → state 广播 → 任务栏)。
+
+### W-3 最小客户端冒烟(不依赖 waybar,验证协议交互本身)
+
+```bash
+WAYLAND_DISPLAY=wayland-3 build-ew/ext-workspace/ext-workspace-client \
+    --expect-groups 1 --expect-workspaces 4 --expect-active 0 0 \
+    --activate 1 0 --then-expect-active 1 0 --stop
+# 输出末行 PASS ext-workspace-client 即通过
+```
+
+### 已自动化(headless,无需用户执行):A 初始状态流/B activate 往返/C 多客户端独立广播/D stop→finished/E IPC get-state 一致性
+
 ## P6:ob-theme 主题 provider + ob-switcher(主题化窗口切换 OSD)(已全部通过,2026-09-04)
 
 背景:ob-theme 插件统一持有 openbox 主题(ob-decor/ob-menu/ob-switcher 都跟随它,provider 缺席时各插件仍能用旧 fallback);ob-switcher = fast-switcher 复制 + labwc 式 OSD,主题色取 themerc 的 `osd.*` / `window_switcher.*` 键。自动化已全绿(ob-theme provider 状态/reload、switcher 正反向/Esc 取消/OSD 生命周期,共 17 断言),本节验证**视觉与真实交互**。

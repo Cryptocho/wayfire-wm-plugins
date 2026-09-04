@@ -81,3 +81,6 @@ subdir('layout-manager')
 
 # P5: ob-switcher (fast-switcher + themerc-themed window-switcher OSD).
 subdir('ob-switcher')
+
+# P7: ext-workspace (ext_workspace_v1 protocol server side).
+subdir('ext-workspace')
