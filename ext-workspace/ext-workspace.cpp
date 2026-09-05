@@ -148,10 +148,12 @@ static void handle_manager_commit(wl_client *client, wl_resource *resource)
 {
     /* All broadcasts are emitted immediately and atomically per batch
      * (reconcile sends one done at the end); nothing to buffer here. */
+    LOGD("ext-workspace: [req] commit from client ", (void*)client);
 }
 
 static void handle_manager_stop(wl_client *client, wl_resource *resource)
 {
+    LOGD("ext-workspace: [req] stop from client ", (void*)client);
     auto *cs = client_of(resource);
     cs->stopped = true;
     ext_workspace_manager_v1_send_finished(resource);
@@ -168,17 +170,21 @@ static void handle_group_create_workspace(wl_client *client, wl_resource *resour
 
 static void handle_group_destroy(wl_client *client, wl_resource *resource)
 {
+    LOGD("ext-workspace: [req] group destroy from client ", (void*)client);
     wl_resource_destroy(resource);
 }
 
 static void handle_ws_destroy(wl_client *client, wl_resource *resource)
 {
+    LOGD("ext-workspace: [req] workspace destroy from client ", (void*)client);
     wl_resource_destroy(resource);
 }
 
 static void handle_ws_activate(wl_client *client, wl_resource *resource)
 {
     auto *d  = static_cast<ws_res_data_t*>(wl_resource_get_user_data(resource));
+    LOGD("ext-workspace: [req] activate workspace ", d->coords.x, ",", d->coords.y,
+        " (wset ", d->wset_index, ") from client ", (void*)client);
     auto *wset = find_wset(d->wset_index);
     if (!wset || !wset->get_attached_output())
     {
@@ -197,24 +203,39 @@ static void handle_ws_activate(wl_client *client, wl_resource *resource)
     ev.old_viewport = wset->get_current_workspace();
     ev.new_viewport = d->coords;
     ev.output       = output;
+    LOGD("ext-workspace: emitting workspace_change_request_signal ", ev.old_viewport,
+        " -> ", ev.new_viewport, " on ", output->to_string());
     output->emit(&ev);
 
-    if (!ev.carried_out)
+    if (ev.carried_out)
+    {
+        LOGD("ext-workspace: request carried out by another plugin");
+    } else
     {
         /* No plugin handled the request (e.g. no vswitch loaded): do it directly. */
+        LOGD("ext-workspace: nobody carried out the request, using set_workspace");
         wset->set_workspace(d->coords);
     }
 }
 
 static void handle_ws_deactivate(wl_client *client, wl_resource *resource)
-{ /* capability not advertised; ignore */ }
+{
+    LOGD("ext-workspace: [req] deactivate (not advertised) from client ", (void*)client);
+    /* capability not advertised; ignore */
+}
 
 static void handle_ws_assign(wl_client *client, wl_resource *resource,
     wl_resource *workspace_group)
-{ /* capability not advertised; ignore */ }
+{
+    LOGD("ext-workspace: [req] assign (not advertised) from client ", (void*)client);
+    /* capability not advertised; ignore */
+}
 
 static void handle_ws_remove(wl_client *client, wl_resource *resource)
-{ /* capability not advertised; ignore */ }
+{
+    LOGD("ext-workspace: [req] remove (not advertised) from client ", (void*)client);
+    /* capability not advertised; ignore */
+}
 
 static const struct ext_workspace_manager_v1_interface manager_impl = {
     .commit = handle_manager_commit,
@@ -529,6 +550,8 @@ class ext_workspace_plugin_t : public wf::plugin_interface_t
 
                 uint32_t state = (wset->get_current_workspace() == coords) ?
                     EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE : 0;
+                LOGD("ext-workspace: [event] ws ", coords.x, ",", coords.y,
+                    " name=", workspace_name(grid, coords), " state=", state);
                 ext_workspace_handle_v1_send_state(ws, state);
                 ext_workspace_handle_v1_send_capabilities(ws,
                     EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE);
