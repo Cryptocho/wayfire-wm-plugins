@@ -6,20 +6,18 @@
 
 背景:out-of-tree 插件 `ext-workspace` 向任务栏/dock 暴露工作区状态(ext-workspace-v1,version 1)。映射:工作区组↔wset(1:1)、工作区↔网格 cell(coordinates=[x,y],name=行主序 1-based "1".."N");state 只发 `active`;capabilities 只声明 `activate`;activate 请求走 `workspace_change_request_signal`(vswitch 同款接入点,无人处理才直接 set_workspace)。urgent/id/动态建组均 deferred(wayfire 0.10 core 无 urgent 概念;协议允许不声明能力)。自动化已全绿(scripts/ext-workspace-test.sh,A–E 五段):初始状态流(group→details→done 时序)、activate 请求端到端、多客户端独立广播、stop→finished、IPC get-state 与协议视图一致。客户端生态:waybar ≥0.14.0 的 workspaces 模块已移植到 ext-workspace-v1。
 
-### 启动嵌套测试会话(给 waybar 连接)
+### 启动嵌套测试会话(waybar 由 autostart 自带)
 
 ```bash
 cd ~/workspace/wm/wayfire-wm-plugins
 WAYFIRE_PLUGIN_PATH=$PWD/build/ext-workspace \
 WAYFIRE_PLUGIN_XML_PATH=$PWD/metadata \
 WLR_BACKENDS=wayland wayfire -c test/wayfire-ext-workspace.ini -d
-# 另一个终端,连接嵌套会话(socket 名见 wayfire 日志,如 wayland-3):
-WAYLAND_DISPLAY=wayland-3 waybar -c <测试用 waybar 配置>
-# 或先跑最小客户端看事件流(不画任何 UI):
-WAYLAND_DISPLAY=wayland-3 build-ew/ext-workspace/ext-workspace-client --expect-groups 1
 ```
 
-(test/wayfire-ext-workspace.ini:plugins=command ipc ext-workspace,vwidth=vheight=2;按惯例配齐 `<super>T`=kitty)
+(test/wayfire-ext-workspace.ini:plugins=command ipc ext-workspace vswitch gtk-shell;**vwidth=4 vheight=1**;vswitch 键位 `<super>F1..F4`(避让主桌面 super+1..4);[autostart] 直接用你自己的 waybar 配置:`waybar --bar main-bar --config "$HOME/.config/wayfire/waybar/config" --style "$HOME/.config/wayfire/waybar/style.css"`;按惯例配齐 `<super>T`=kitty。`<super>T` 开几个 kitty 窗口配合测试)
+
+补充说明(2026-09-05 用户指出后修正):此前 ini 只有 command/ipc/ext-workspace 且 2x2 网格,没有 vswitch/gtk-shell、没有 autostart waybar——交互测试无从谈起。现已配齐:waybar 由 autostart 拉起、4x1 网格、vswitch F1..F4 切换(headless 套件 B 段现在走 vswitch 接管路径,客户端改为轮询等待动画收敛,依然全绿)。
 
 ### W-1 waybar 显示工作区(需要 waybar ≥0.14.0)
 
@@ -30,7 +28,7 @@ waybar 配置里加 ext-workspace 模块(0.14 从 wlr/workspaces 移植而来,�
 "ext/workspaces": { "format": "{name}", "on-click": "activate" }
 ```
 
-预期:任务栏出现 4 个工作区按钮(1..4),"1"高亮;`<super><shift>2`(vswitch)切到 2 后"2"高亮。
+预期:任务栏出现 4 个工作区按钮(1..4),"1"高亮;`<super>F2`(vswitch,测试 ini 键位)切到 2 后"2"高亮。
 
 ### W-2 通过 waybar 点击切换工作区
 

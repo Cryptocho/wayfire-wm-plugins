@@ -475,12 +475,22 @@ int main(int argc, char **argv)
             t->name);
         ext_workspace_handle_v1_activate(t->handle);
         ext_workspace_manager_v1_commit(g.manager);
-        for (int i = 0; i < 6; i++)
+
+        /* The request may be handled by an animating plugin (e.g. vswitch):
+         * the active state lands after the animation. Poll up to ~3s. */
+        struct workspace *a = NULL;
+        for (int i = 0; i < 60; i++)
         {
             wl_display_roundtrip(g.display);
+            a = find_active();
+            if (a && (a->coords[0] == then_x) && (a->coords[1] == then_y))
+            {
+                break;
+            }
+
+            usleep(50000);
         }
 
-        struct workspace *a = find_active();
         EXPECT(a, "no active workspace after activate");
         EXPECT((a->coords[0] == then_x) && (a->coords[1] == then_y),
             "active workspace is (%u,%u) after activate, expected (%u,%u)",
