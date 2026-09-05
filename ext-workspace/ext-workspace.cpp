@@ -550,8 +550,6 @@ class ext_workspace_plugin_t : public wf::plugin_interface_t
 
                 uint32_t state = (wset->get_current_workspace() == coords) ?
                     EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE : 0;
-                LOGD("ext-workspace: [event] ws ", coords.x, ",", coords.y,
-                    " name=", workspace_name(grid, coords), " state=", state);
                 ext_workspace_handle_v1_send_state(ws, state);
                 ext_workspace_handle_v1_send_capabilities(ws,
                     EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE);

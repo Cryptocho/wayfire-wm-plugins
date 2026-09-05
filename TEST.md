@@ -2,7 +2,7 @@
 
 *最新的排在最上面;越往下越旧(已通过的阶段沉底)。*
 
-## P7:ext-workspace(ext_workspace_v1 协议 server 侧)(自动化全绿,交互验证待用户)
+## P7:ext-workspace(ext_workspace_v1 协议 server 侧)(已全部通过,2026-09-05)
 
 背景:out-of-tree 插件 `ext-workspace` 向任务栏/dock 暴露工作区状态(ext-workspace-v1,version 1)。映射:工作区组↔wset(1:1)、工作区↔网格 cell(coordinates=[x,y],name=行主序 1-based "1".."N");state 只发 `active`;capabilities 只声明 `activate`;activate 请求走 `workspace_change_request_signal`(vswitch 同款接入点,无人处理才直接 set_workspace)。urgent/id/动态建组均 deferred(wayfire 0.10 core 无 urgent 概念;协议允许不声明能力)。自动化已全绿(scripts/ext-workspace-test.sh,A–E 五段):初始状态流(group→details→done 时序)、activate 请求端到端、多客户端独立广播、stop→finished、IPC get-state 与协议视图一致。客户端生态:waybar ≥0.14.0 的 workspaces 模块已移植到 ext-workspace-v1。
 
@@ -42,6 +42,10 @@ WAYLAND_DISPLAY=wayland-3 build-ew/ext-workspace/ext-workspace-client \
     --activate 1 0 --then-expect-active 1 0 --stop
 # 输出末行 PASS ext-workspace-client 即通过
 ```
+
+### W-1/W-2 结果(2026-09-05,用户确认全部通过)
+
+根因是 waybar 侧配置:`ext/workspaces` 模块的点击切换**必须显式配置** `"on-click": "activate"`(默认点击无动作);高亮依赖 state=active 位(waybar 自动加 `active` CSS class——ext/workspaces 用 `.active`,与 wlr/workspaces 的 `.focused` 不同,archcraft style.css 原有的 `.focused` 规则对它无效)。插件侧调试日志([req]/[event])曾用于定位,定位后高频 [event] 已删,[req] 保留。
 
 ### 已自动化(headless,无需用户执行):A 初始状态流/B activate 往返/C 多客户端独立广播/D stop→finished/E IPC get-state 一致性
 
