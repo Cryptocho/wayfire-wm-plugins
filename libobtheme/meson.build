@@ -35,6 +35,10 @@ libobtheme_includes = include_directories(
 # constraint becomes a physical guarantee instead of load-order luck.
 # Symbols are hidden by default; obtheme.c exports the public API
 # explicitly with OBTHEME_API.
+#
+# Installed into wayfire's plugindir, NEXT TO the plugins: consumers carry
+# install_rpath '$ORIGIN' (set in their meson.build), so dlopen resolves
+# libobtheme.so from the plugin's own directory when installed.
 libobtheme = shared_library('obtheme',
   libobtheme_sources,
   include_directories: libobtheme_includes,
@@ -43,5 +47,6 @@ libobtheme = shared_library('obtheme',
   # vendored img-xbm.c uses GNU case ranges
   override_options: ['c_std=gnu11'],
   gnu_symbol_visibility: 'hidden',
-  install: false,
+  install: true,
+  install_dir: plugindir,
 )

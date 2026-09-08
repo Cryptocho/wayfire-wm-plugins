@@ -9,6 +9,14 @@ project('wayfire-wm-plugins', 'cpp', 'c',
 # itself (linked with -rdynamic), so plugins must NOT link any wayfire lib.
 dep_wf = dependency('wayfire')
 
+# Install targets: wayfire's own dirs, read from its pkg-config metadata.
+# Plugins and libobtheme land in the SAME plugindir, and plugins get
+# install_rpath = '$ORIGIN' so the dlopen'd DT_NEEDED libobtheme.so always
+# resolves next to the plugin — the tree build rpath ($ORIGIN/../libobtheme)
+# must not survive installation (it would point at a non-existent dir).
+plugindir = dep_wf.get_variable('plugindir', default_value: '/usr/lib/wayfire')
+metadatadir = dep_wf.get_variable('metadatadir', default_value: '/usr/share/wayfire/metadata')
+
 # Dependencies for libobtheme (vendored labwc theme engine).
 dep_cairo = dependency('cairo')
 dep_pangocairo = dependency('pangocairo')
@@ -84,3 +92,16 @@ subdir('ob-switcher')
 
 # P7: ext-workspace (ext_workspace_v1 protocol server side).
 subdir('ext-workspace')
+
+# wayfire plugin metadata (option declarations + defaults) — installed via
+# meson so `meson install` produces a complete, usable installation.
+install_data(
+  'metadata/ob-theme.xml',
+  'metadata/ob-decor.xml',
+  'metadata/ob-menu.xml',
+  'metadata/ob-switcher.xml',
+  'metadata/layout-manager.xml',
+  'metadata/ext-workspace.xml',
+  'metadata/proto-pan.xml',
+  install_dir: metadatadir,
+)

@@ -24,7 +24,8 @@ shared_module('ext-workspace',
   'ext-workspace.cpp', ew_proto_c, ew_server_h,
   dependencies: [dep_wf],
   cpp_args: ['-fno-gnu-unique', '-DWLR_USE_UNSTABLE'],
-  install: false,
+  install: true,
+  install_dir: plugindir,
 )
 
 # Minimal test client (event-stream assertions, see scripts/ext-workspace-test.sh).

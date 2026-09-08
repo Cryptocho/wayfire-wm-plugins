@@ -11,5 +11,8 @@ shared_module('ob-decor',
   dependencies: [dep_wf, libobtheme_dep, dep_cairo, dep_pangocairo],
   include_directories: [ob_menu_events_inc],
   cpp_args: ['-fno-gnu-unique', '-DWLR_USE_UNSTABLE'],
-  install: false,
+  install: true,
+  install_dir: plugindir,
+  # installed plugin dir is where libobtheme.so also lives
+  install_rpath: '$ORIGIN',
 )
