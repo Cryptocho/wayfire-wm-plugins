@@ -31,6 +31,7 @@
 #include "lm-float.hpp"
 #include "lm-ipc.hpp"
 #include "lm-animator.hpp"
+#include "lm-drag.hpp"
 
 namespace lm
 {
@@ -98,6 +99,8 @@ class lm_output_t : public wf::per_output_plugin_instance_t
     bool tiling_active();
     bool want_tile(wayfire_toplevel_view view);
     bool handle_toggle_float();
+    bool handle_tile_move();
+    bool handle_tile_resize();
     void handle_view_mapped(wayfire_toplevel_view toplevel);
     bool handle_split(bool horizontal);
     void start_divider_drag(const lm::divider_band_t& band, int axis_pos);
@@ -113,10 +116,33 @@ class lm_output_t : public wf::per_output_plugin_instance_t
         return drag.active;
     }
 
+    /* The output instance currently running a drag-to-reorder, if any. */
+    lm_output_t *find_reorder_output();
+
+    /* Drag-to-reorder (sway-style): press the move button on a tiled view
+     * and drag; a preview shows where the view would be inserted on drop
+     * (insert/swap). Uses the shared move_drag::core_drag_t (same as the
+     * move plugin) so the window follows the cursor while dragging. */
+    bool move_drag_active() const
+    {
+        return reorder_active;
+    }
+
+    bool start_move_drag(wayfire_toplevel_view view);
+    /** End a drag-to-reorder. @suppress_drop = true when the grab was
+     * stolen (no drop should run). */
+    void finish_move_drag(bool suppress_drop);
+    /** Forward the current pointer position to the shared drag helper. */
+    void move_drag_motion(double dx, double dy);
+
     wf::plugin_activation_data_t grab_interface = {
         .name = "layout-manager",
         .capabilities = wf::CAPABILITY_MANAGE_COMPOSITOR,
-        .cancel = [=] { stop_divider_drag(); },
+        .cancel = [=]
+        {
+            stop_divider_drag();
+            finish_move_drag(true);
+        },
     };
 
   private:
@@ -141,6 +167,20 @@ class lm_output_t : public wf::per_output_plugin_instance_t
     static constexpr int MIN_SANE_W = 100;
     static constexpr int MIN_SANE_H = 60;
 
+    /* True while a drag-to-reorder is in progress on this output. The window
+     * motion is displayed with a 2D transformer (the wayfire move_drag
+     * static library cannot be linked from an out-of-tree plugin), and the
+     * release is routed through on_divider_button (raw core signal).
+     *
+     * Pointer positions are tracked via event deltas (like the divider
+     * drag): the core motion signal fires BEFORE wlr_cursor updates the
+     * cursor, and our IGNORE prevents that update entirely. */
+    bool reorder_active = false;
+    wayfire_toplevel_view reorder_view = nullptr;
+    wf::point_t reorder_grab = {0, 0};
+    wf::point_t reorder_pos  = {0, 0};
+    nonstd::observer_ptr<lm::lm_scale_transformer_t> reorder_tr;
+
   private:
     wf::option_wrapper_t<wf::activatorbinding_t> key_toggle_mode{
         "layout-manager/key_toggle_mode"};
@@ -150,6 +190,10 @@ class lm_output_t : public wf::per_output_plugin_instance_t
         "layout-manager/key_split_horizontal"};
     wf::option_wrapper_t<wf::activatorbinding_t> key_split_vertical{
         "layout-manager/key_split_vertical"};
+    wf::option_wrapper_t<wf::buttonbinding_t> button_tile_move{
+        "layout-manager/button_tile_move"};
+    wf::option_wrapper_t<wf::buttonbinding_t> button_tile_resize{
+        "layout-manager/button_tile_resize"};
     wf::activator_callback on_split_horizontal = [=] (auto)
     {
         return handle_split(true);
@@ -165,6 +209,14 @@ class lm_output_t : public wf::per_output_plugin_instance_t
     wf::activator_callback on_toggle_float = [=] (auto)
     {
         return handle_toggle_float();
+    };
+    wf::button_callback on_tile_move = [=] (auto)
+    {
+        return handle_tile_move();
+    };
+    wf::button_callback on_tile_resize = [=] (auto)
+    {
+        return handle_tile_resize();
     };
 
     void attach_view(wayfire_toplevel_view view, std::optional<wf::point_t> vp = {})
@@ -264,8 +316,19 @@ class wayfire_layout_manager : public wf::plugin_interface_t
 {
   public:
     friend class lm_output_t;
+
+    /* Tracks drag-to-reorder drops (shared move_drag helper). One instance
+     * for the whole plugin: the core_drag_t singleton is global. */
+    std::unique_ptr<lm::drag_manager_t> drag_manager;
+
+    lm_output_t *find_reorder_output()
+    {
+        return outputs.find_reorder();
+    }
+
     void init() override
     {
+        drag_manager = std::make_unique<lm::drag_manager_t>();
         wf::option_wrapper_t<std::string> default_mode{
             "layout-manager/default_mode"};
         std::string dm = default_mode.value();
@@ -724,7 +787,12 @@ class wayfire_layout_manager : public wf::plugin_interface_t
      * a fraction drag (the press is swallowed so views/decoration never
      * see it). While dragging, further button events are swallowed too;
      * release stops the drag. Same early-swallow route as the ob-menu
-     * desktop right-click. */
+     * desktop right-click.
+     *
+     * Only presses WITHOUT any pressed modifier start divider/edge drags:
+     * modifier-pressed presses are left to the button bindings (the move
+     * button -> drag-to-reorder, the resize button -> fraction resize),
+     * mirroring the wayfire move/resize plugins which ignore tiled views. */
     wf::signal::connection_t<wf::input_event_signal<wlr_pointer_button_event>>
     on_divider_button = [=] (wf::input_event_signal<wlr_pointer_button_event> *ev)
     {
@@ -744,6 +812,19 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             return;
         }
 
+        /* A drag-to-reorder is in progress somewhere: route the release
+         * through the shared drag helper (drop runs on drag_done). */
+        if (auto *reordering = find_reorder_output())
+        {
+            if (ev->event->state == WL_POINTER_BUTTON_STATE_RELEASED)
+            {
+                reordering->finish_move_drag(false);
+            }
+
+            ev->mode = wf::input_event_processing_mode_t::IGNORE;
+            return;
+        }
+
         if ((ev->mode != wf::input_event_processing_mode_t::FULL) ||
             (ev->event->state != WL_POINTER_BUTTON_STATE_PRESSED) ||
             !is_tiling())
@@ -751,7 +832,13 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             return;
         }
 
-        auto gc = wf::get_core().get_cursor_position();
+        /* modifier held: leave the press to the button bindings */
+        if (wf::get_core().seat->get_keyboard_modifiers() != 0)
+        {
+            return;
+        }
+
+        auto gc = wf::get_core().get_cursor_position().round_down();
         auto wo = wf::get_core().output_layout->get_output_at(gc.x, gc.y);
         auto *inst = wo ? outputs.get(wo) : nullptr;
         if (!inst || !wo->wset())
@@ -814,8 +901,9 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             auto node = lm::view_node_t::get_node(focus);
             if (node)
             {
+                const int EDGE = 6;
                 auto edge_band = edge_divider_band(node,
-                    wf::point_t{gc.x - og.x, gc.y - og.y});
+                    wf::point_t{gc.x - og.x, gc.y - og.y}, EDGE, EDGE);
                 if (edge_band)
                 {
                     int axis_pos = (edge_band->direction ==
@@ -833,27 +921,25 @@ class wayfire_layout_manager : public wf::plugin_interface_t
 
     /**
      * If the wset-local point lies on one of the leaf's frame edges
-     * (left/right/top/bottom strip), find the boundary to adjust: the
-     * nearest ancestor split with the matching axis that has a sibling on
-     * that side (sway resize semantics). The reference box is the view's
-     * target geometry (the wm box — the SSD frame lives inside it), which
-     * is inset from the raw tree-node box by the gaps.
+     * (left/right/top/bottom strip of the given sizes), find the boundary
+     * to adjust: the nearest ancestor split with the matching axis that
+     * has a sibling on that side (sway resize semantics). The reference
+     * box is the view's target geometry (the wm box — the SSD frame lives
+     * inside it), which is inset from the raw tree-node box by the gaps.
      */
     static std::optional<lm::divider_band_t> edge_divider_band(
-        nonstd::observer_ptr<lm::view_node_t> node, const wf::point_t& p)
+        nonstd::observer_ptr<lm::view_node_t> node, const wf::point_t& p,
+        int horiz_edge, int vert_edge)
     {
-        /* grab strips: the frame is ~4px; a bit wider is friendlier */
-        static constexpr int EDGE = 6;
-
         const auto &g = node->target_geometry();
         enum { LEFT, RIGHT, TOP, BOTTOM } edge;
-        bool at_left   = (p.x >= g.x) && (p.x < g.x + EDGE) &&
+        bool at_left   = (p.x >= g.x) && (p.x < g.x + horiz_edge) &&
             (p.y >= g.y) && (p.y < g.y + g.height);
-        bool at_right  = (p.x >= g.x + g.width - EDGE) && (p.x < g.x + g.width) &&
+        bool at_right  = (p.x >= g.x + g.width - horiz_edge) && (p.x < g.x + g.width) &&
             (p.y >= g.y) && (p.y < g.y + g.height);
-        bool at_top    = (p.y >= g.y) && (p.y < g.y + EDGE) &&
+        bool at_top    = (p.y >= g.y) && (p.y < g.y + vert_edge) &&
             (p.x >= g.x) && (p.x < g.x + g.width);
-        bool at_bottom = (p.y >= g.y + g.height - EDGE) && (p.y < g.y + g.height) &&
+        bool at_bottom = (p.y >= g.y + g.height - vert_edge) && (p.y < g.y + g.height) &&
             (p.x >= g.x) && (p.x < g.x + g.width);
 
         if (at_left)
@@ -918,18 +1004,25 @@ class wayfire_layout_manager : public wf::plugin_interface_t
     /* While a divider drag is active, motion is driven directly from the
      * device-event signal (the press that started the drag was swallowed,
      * so wayfire's implicit button grab never anchors pointer motion to
-     * the grab node). */
+     * the grab node). A drag-to-reorder uses the same raw signal to feed
+     * the shared move_drag helper. */
     wf::signal::connection_t<wf::input_event_signal<wlr_pointer_motion_event>>
     on_divider_motion = [=] (wf::input_event_signal<wlr_pointer_motion_event> *ev)
     {
         auto *dragging = outputs.find_active_drag();
-        if (!dragging)
+        if (dragging)
         {
+            dragging->drag_motion_raw(ev->event->delta_x, ev->event->delta_y);
+            ev->mode = wf::input_event_processing_mode_t::IGNORE;
             return;
         }
 
-        dragging->drag_motion_raw(ev->event->delta_x, ev->event->delta_y);
-        ev->mode = wf::input_event_processing_mode_t::IGNORE;
+        if (auto *reordering = find_reorder_output())
+        {
+            reordering->move_drag_motion(ev->event->delta_x,
+                ev->event->delta_y);
+            ev->mode = wf::input_event_processing_mode_t::IGNORE;
+        }
     };
 
     /* Focus-follows-mouse for tiled views: when the pointer moves over a
@@ -981,6 +1074,19 @@ class wayfire_layout_manager : public wf::plugin_interface_t
             for (auto &[wo, inst] : output_instance)
             {
                 if (inst->divider_drag_active())
+                {
+                    return inst.get();
+                }
+            }
+
+            return nullptr;
+        }
+
+        lm_output_t *find_reorder()
+        {
+            for (auto &[wo, inst] : output_instance)
+            {
+                if (inst->move_drag_active())
                 {
                     return inst.get();
                 }
@@ -1304,12 +1410,200 @@ bool lm_output_t::handle_toggle_float()
     return plugin->toggle_float_view(view);
 }
 
+lm_output_t *lm_output_t::find_reorder_output()
+{
+    return plugin->find_reorder_output();
+}
+
+/* ---- drag-to-reorder (sway semantics) ---- */
+
+bool lm_output_t::handle_tile_move()
+{
+    if (!plugin->is_tiling())
+    {
+        return false;
+    }
+
+    /* a divider/edge drag is already in progress */
+    if (output->is_plugin_active(grab_interface.name))
+    {
+        return false;
+    }
+
+    auto focus = wf::toplevel_cast(wf::get_core().get_cursor_focus_view());
+    if (!focus || !lm::view_node_t::get_node(focus) ||
+        (focus->get_output() != output))
+    {
+        return false; /* not on a tiled view: leave to the move plugin */
+    }
+
+    return start_move_drag(focus);
+}
+
+bool lm_output_t::start_move_drag(wayfire_toplevel_view view)
+{
+    if (reorder_active || output->is_plugin_active(grab_interface.name))
+    {
+        return false; /* a drag (ours or another plugin's) is running */
+    }
+
+    if (!output->activate_plugin(&grab_interface))
+    {
+        return false;
+    }
+
+    input_grab->grab_input(wf::scene::layer::OVERLAY);
+    reorder_view   = view;
+    reorder_grab   = lm::get_global_input_coordinates(output);
+    reorder_pos    = reorder_grab;
+    reorder_active = true;
+    reorder_tr = wf::ensure_named_transformer<lm::lm_scale_transformer_t>(
+        view, wf::TRANSFORMER_2D, lm::lm_drag_anim_name, view);
+    reorder_tr->set_target_box(view->get_geometry());
+    view->damage();
+    LOGI("layout-manager: drag-to-reorder started for view ", view->get_id());
+    return true;
+}
+
+void lm_output_t::finish_move_drag(bool suppress_drop)
+{
+    if (!reorder_active)
+    {
+        return;
+    }
+
+    reorder_active = false;
+
+    if (reorder_view)
+    {
+        if (reorder_tr && reorder_view->get_transformed_node())
+        {
+            reorder_view->get_transformed_node()->rem_transformer(
+                lm::lm_drag_anim_name);
+            reorder_view->damage();
+        }
+
+        if (plugin->drag_manager)
+        {
+            if (!suppress_drop)
+            {
+                plugin->drag_manager->handle_drop(reorder_view, output,
+                    reorder_pos);
+            } else
+            {
+                plugin->drag_manager->suppress_next_drop();
+                plugin->drag_manager->hide_preview();
+            }
+        }
+    }
+
+    reorder_view = nullptr;
+    reorder_tr   = nullptr;
+
+    if (output->is_plugin_active(grab_interface.name))
+    {
+        output->deactivate_plugin(&grab_interface);
+    }
+
+    input_grab->ungrab_input();
+}
+
+void lm_output_t::move_drag_motion(double dx, double dy)
+{
+    if (!reorder_active || !reorder_view)
+    {
+        return;
+    }
+
+    /* Track the drag position ourselves: the raw motion signal fires
+     * before wlr_cursor updates the cursor, so get_cursor_position() is
+     * one event behind (and the IGNORE below stops the update entirely).
+     * The grab position was captured at press time when the cursor was
+     * already up to date. */
+    reorder_pos.x += (int)std::lround(dx);
+    reorder_pos.y += (int)std::lround(dy);
+
+    auto g = reorder_view->get_geometry();
+    wf::geometry_t box{
+        g.x + reorder_pos.x - reorder_grab.x,
+        g.y + reorder_pos.y - reorder_grab.y,
+        g.width,
+        g.height,
+    };
+
+    if (reorder_tr)
+    {
+        reorder_tr->set_target_box(box);
+        reorder_view->damage();
+    }
+
+    if (plugin->drag_manager)
+    {
+        plugin->drag_manager->update_preview(reorder_view, reorder_pos);
+    }
+}
+
+/* ---- fraction resize via the resize button ---- */
+
+bool lm_output_t::handle_tile_resize()
+{
+    if (!plugin->is_tiling())
+    {
+        return false;
+    }
+
+    if (output->is_plugin_active(grab_interface.name))
+    {
+        return false;
+    }
+
+    auto focus = wf::toplevel_cast(wf::get_core().get_cursor_focus_view());
+    if (!focus || (focus->get_output() != output))
+    {
+        return false;
+    }
+
+    auto node = lm::view_node_t::get_node(focus);
+    if (!node)
+    {
+        return false; /* not tiled: let the resize plugin handle it */
+    }
+
+    auto gc = wf::get_core().get_cursor_position().round_down();
+    auto og = output->get_layout_geometry();
+    auto g  = node->target_geometry();
+
+    /* Half-view strips: the cursor's half of the target view selects the
+     * boundary to drag (sway resize semantics). */
+    auto band = plugin->edge_divider_band(node,
+        wf::point_t{gc.x - og.x, gc.y - og.y},
+        std::max(1, g.width / 2), std::max(1, g.height / 2));
+    if (!band)
+    {
+        return false;
+    }
+
+    auto size = output->wset()->get_last_output_geometry().value_or(
+        lm::default_output_resolution);
+    auto vp = output->wset()->get_current_workspace();
+    wf::point_t wsetg{
+        gc.x - og.x + vp.x * size.width,
+        gc.y - og.y + vp.y * size.height};
+
+    int axis_pos = (band->direction == lm::SPLIT_VERTICAL) ?
+        wsetg.x : wsetg.y;
+    start_divider_drag(*band, axis_pos);
+    return divider_drag_active();
+}
+
 void lm_output_t::init()
 {
     output->add_activator(key_toggle_mode, &on_toggle_mode);
     output->add_activator(key_toggle_float, &on_toggle_float);
     output->add_activator(key_split_horizontal, &on_split_horizontal);
     output->add_activator(key_split_vertical, &on_split_vertical);
+    output->add_button(button_tile_move, &on_tile_move);
+    output->add_button(button_tile_resize, &on_tile_resize);
     input_grab = std::make_unique<wf::input_grab_t>("layout-manager", output,
         nullptr, nullptr, nullptr);
 
@@ -1327,7 +1621,10 @@ void lm_output_t::fini()
     output->rem_binding(&on_toggle_float);
     output->rem_binding(&on_split_horizontal);
     output->rem_binding(&on_split_vertical);
+    output->rem_binding(&on_tile_move);
+    output->rem_binding(&on_tile_resize);
     stop_divider_drag();
+    finish_move_drag(true);
 }
 } // namespace lm
 

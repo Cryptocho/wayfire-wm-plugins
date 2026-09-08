@@ -76,6 +76,14 @@ class lm_workspace_set_data_t : public wf::custom_data_t
     std::vector<std::vector<std::unique_ptr<lm::tree_node_t>>> roots;
     std::vector<std::vector<wf::scene::floating_inner_ptr>> tiled_sublayer;
 
+    /**
+     * Per-wset floating layer: floating views (user/toggle float, auto-float
+     * or untile-on-drag) are collected here so that they always render above
+     * every tiled sublayer. Kept in front of the tiled sublayers by
+     * re-adding it at the end of resize_roots().
+     */
+    wf::scene::floating_inner_ptr floating_sublayer;
+
     wf::option_wrapper_t<int> inner_gaps{"layout-manager/gaps_inner"};
     wf::option_wrapper_t<int> outer_gaps{"layout-manager/gaps_outer"};
     wf::option_wrapper_t<std::string> tiling_style{"layout-manager/tiling_layout"};
@@ -174,6 +182,12 @@ class lm_workspace_set_data_t : public wf::custom_data_t
             }
         }
 
+        if (!floating_sublayer)
+        {
+            floating_sublayer = std::make_shared<wf::scene::floating_inner_node_t>(false);
+            wf::scene::add_front(wset.lock()->get_node(), floating_sublayer);
+        }
+
         roots.resize(wsize.width);
         tiled_sublayer.resize(wsize.width);
         for (int i = 0; i < wsize.width; i++)
@@ -194,13 +208,17 @@ class lm_workspace_set_data_t : public wf::custom_data_t
             }
         }
 
+        /* Floating views must render above every tiled sublayer: keep the
+         * floating layer as the front-most child of the wset node (every
+         * add_front above is re-ordered here). */
+        wf::scene::readd_front(wset.lock()->get_node(), floating_sublayer);
+
         update_root_size();
         update_gaps();
     }
 
     void update_root_size()
     {
-        auto wo = wset.lock()->get_attached_output();
         wf::geometry_t workarea = workarea_or_default();
 
         wf::geometry_t output_geometry = wset.lock()->get_last_output_geometry().value_or(
@@ -225,19 +243,6 @@ class lm_workspace_set_data_t : public wf::custom_data_t
                 roots[i][j]->set_geometry(vp_geometry, tx.tx);
             }
         }
-    }
-
-    void destroy_sublayer(wf::scene::floating_inner_ptr sublayer)
-    {
-        // Transfer views to the top
-        auto root     = wset.lock()->get_node();
-        auto children = root->get_children();
-        auto sublayer_children = sublayer->get_children();
-        sublayer->set_children_list({});
-        children.insert(children.end(), sublayer_children.begin(), sublayer_children.end());
-        root->set_children_list(children);
-        wf::scene::update(root, wf::scene::update_flag::CHILDREN_LIST);
-        wf::scene::remove_child(sublayer);
     }
 
     lm::gap_size_t get_gaps() const
@@ -473,7 +478,7 @@ class lm_workspace_set_data_t : public wf::custom_data_t
 
                 if (reinsert && view->get_output())
                 {
-                    wf::scene::readd_front(view->get_output()->wset()->get_node(),
+                    wf::scene::readd_front(floating_sublayer,
                         view->get_root_node());
                 }
             }

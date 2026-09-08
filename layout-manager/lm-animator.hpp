@@ -29,6 +29,10 @@
 namespace lm
 {
 static const std::string lm_scale_anim_name = "layout-manager-scale-anim";
+/* Transformer used while drag-reordering a tiled view (window follows the
+ * cursor as a pure display-layer translation; the tree is untouched until
+ * the drop). */
+static const std::string lm_drag_anim_name = "layout-manager-drag-anim";
 
 /**
  * Scale/translate the view so that its displayed (wm) geometry region is

@@ -500,4 +500,49 @@ std::vector<divider_band_t> get_divider_bands(
     collect_divider_bands(root, out, tolerance);
     return out;
 }
+
+nonstd::observer_ptr<view_node_t> find_view_at(
+    const std::unique_ptr<tree_node_t>& root, wf::point_t input)
+{
+    if (root->as_view_node())
+    {
+        return root->as_view_node();
+    }
+
+    for (auto& child : root->children)
+    {
+        if (child->geometry & input)
+        {
+            return find_view_at(child, input);
+        }
+    }
+
+    return nullptr;
+}
+
+wf::point_t get_global_input_coordinates(wf::output_t *output)
+{
+    auto local = output->get_cursor_position();
+    auto vp    = output->wset()->get_current_workspace();
+    auto size  = output->get_screen_size();
+    local.x += size.width * vp.x;
+    local.y += size.height * vp.y;
+    return local.round_down();
+}
+
+int remove_child_no_arange(nonstd::observer_ptr<tree_node_t> child)
+{
+    auto &children = child->parent->children;
+    for (size_t i = 0; i < children.size(); i++)
+    {
+        if (children[i].get() == child.get())
+        {
+            children.erase(children.begin() + i);
+            return (int)i;
+        }
+    }
+
+    wf::dassert(false, "remove_child_no_arange: child not found");
+    return -1;
+}
 }

@@ -88,5 +88,32 @@
 			<_long>View matcher expression; matching views are never tiled and open floating (e.g. "type=dialog"). Empty = no auto-float rules.</_long>
 			<default></default>
 		</option>
+		<option name="button_tile_move" type="button">
+			<_short>Drag-to-reorder tiled views</_short>
+			<_long>Button binding: pressing on a tiled view starts a sway-style drag; dropping it over another tiled view inserts/swaps it (a preview shows the drop position). The focused view is unchanged until the drop.</_long>
+			<default>&lt;super&gt; BTN_LEFT</default>
+		</option>
+		<option name="button_tile_resize" type="button">
+			<_short>Resize tiled views</_short>
+			<_long>Button binding: pressing on a tiled view starts a fraction resize of the whole column/row containing the cursor (the boundary between the view's column and its neighbor is dragged).</_long>
+			<default>&lt;super&gt; BTN_RIGHT</default>
+		</option>
+		<option name="preview_base_color" type="color">
+			<_short>Drag preview fill color</_short>
+			<_long>Fill color of the drop-position preview shown while drag-reordering a tiled view.</_long>
+			<default>#2f2f2f99</default>
+		</option>
+		<option name="preview_base_border" type="color">
+			<_short>Drag preview border color</_short>
+			<_long>Border color of the drop-position preview shown while drag-reordering a tiled view.</_long>
+			<default>#4a90d999</default>
+		</option>
+		<option name="preview_border_width" type="int">
+			<_short>Drag preview border width</_short>
+			<_long>Border width (px) of the drop-position preview.</_long>
+			<default>2</default>
+			<min>0</min>
+			<max>50</max>
+		</option>
 	</plugin>
 </wayfire>

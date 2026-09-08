@@ -234,6 +234,26 @@ struct divider_band_t
 std::vector<divider_band_t> get_divider_bands(
     const std::unique_ptr<tree_node_t>& root, int tolerance = 4);
 
+/**
+ * Find the deepest view node whose geometry (wset-global, gaps NOT applied)
+ * contains the given point.
+ */
+nonstd::observer_ptr<view_node_t> find_view_at(
+    const std::unique_ptr<tree_node_t>& root, wf::point_t input);
+
+/**
+ * Translate a pointer position on the given output to wset-global
+ * coordinates (tree coordinate system: output-local + workspace offsets).
+ */
+wf::point_t get_global_input_coordinates(wf::output_t *output);
+
+/**
+ * Remove a child from its parent's children list WITHOUT triggering a
+ * re-arrange, and return its index in the list. Used by swap operations
+ * that keep the swapped views' geometries (fractions) intact.
+ */
+int remove_child_no_arange(nonstd::observer_ptr<tree_node_t> child);
+
 
 /**
  * Call the given function on every view in the tree.

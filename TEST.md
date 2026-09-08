@@ -2,6 +2,42 @@
 
 *最新的排在最上面;越往下越旧(已通过的阶段沉底)。*
 
+## P8:sway 式拖拽重排 + 浮动置顶 + 半区 resize(2026-09-08)
+
+背景:用户实测反馈三个问题并给出 sway 语义要求:
+1. **拖拽(tiling 下 super+BTN_LEFT)**:此前被 move/resize 插件拒绝(树视图 allowed_actions 不含 MOVE/RESIZE),而本插件的 6px 边缘抓取又不检查修饰键,super+BTN_LEFT 在边缘按下会误触发 edge-resize(窗口动、鼠标不跟手)。
+2. **浮动窗口置顶**:浮动/auto-float 视图 detach 后回到 wset 节点,被反复 add_front 的 tiled sublayers 压住,永远低于平铺窗口。
+3. **sway 式重排**:move 键(tiling 下)应拖拽 tiled 窗口并可在目标窗口上按 1/3 边缘插入(左/右/上/下)或中心互换(swap),带落点 preview。
+
+实现(全部在 `layout-manager/`):
+- `lm-wset.hpp`:新增 per-wset `floating_sublayer`,viewport 结束后 `readd_front` 保证永远在全部 tiled sublayer 之上;detach 的视图改放入该层(浮动窗口 / auto-float / stacking 模式下所有窗口都置顶)。
+- `lm-drag.hpp`(新):drop 逻辑移植自 wayfire tile-dragging(INSERT_LEFT/RIGHT/ABOVE/BELOW/SWAP、1/3 敏感性、preview 矩形),swap 保留双方 fraction,insert 走 fraction 模型。
+- `lm-main.cpp`:自管拖拽(`move_drag::core_drag_t` 在 wayfire 是 static lib,out-of-tree 无法链接,改用 `lm_scale_transformer_t` 显示平移 + 事件 delta 累计追踪指针——**不要用 get_cursor_position()**,core motion signal 在 wlr_cursor 更新前触发且我们 IGNORE 会彻底冻结光标)。`button_tile_move`(默认 `<super> BTN_LEFT`)启动重排;`button_tile_resize`(默认 `<super> BTN_RIGHT`)半区判定启动既有 fraction resize;`on_divider_button` 仅无修饰键时处理 divider/edge 抓取。
+- 绑定避让核对(2026-09-08 桌面快照): `<super>BTN_LEFT`(move)、`<super>BTN_RIGHT`(resize)与桌面占用一致但**不冲突**:tiling 下 move/resize 插件因 allowed_actions 拒绝,我们的 binding 接管;stacking 下 move/resize 插件正常工作、我们返回 false 放行。
+
+自动化:`scripts/lm-drag-test.sh`(headless,test/wayfire-layout-drag.ini,button 绑定无修饰以便 vinput 直接触发)D-1 insert / D-2 swap / D-3 边界 +20px 且份额守恒 / D-4 MIN_SANE 钳制 全绿;lm-test 五段 + ob-switcher/decor-destroy/ext-workspace/obmenu/obtheme/m5 全部无回归。
+
+### S-1 拖拽重排(insert)
+
+进 tiling(`<super><shift>T`),开 3 个 kitty。按住 `<super>+左键` 拖动某个窗口到另一个窗口的**左/右/上/下 1/3 边缘处**:出现半透明预览矩形,松开后窗口插入该位置(新 split 包裹),原来位置腾空重排。
+
+### S-2 拖拽互换(swap)
+
+按住 `<super>+左键` 把窗口拖到另一窗口的**中心 1/3** 区域:预览铺满目标窗,松开后两窗口互换位置(swap,各自几何份额保留)。
+
+### S-3 浮动窗口置顶
+
+tiling 下开 3 个窗口 + `<super><shift>Space` 浮动其中一个 → 浮动窗口显示在**全部平铺窗口之上**;点击平铺窗口再点回浮动窗口,浮动窗口始终可见(点击浮动窗口它会提到最前)。再按一次浮动态(或切 stacking)恢复。
+
+### S-4 resize 按钮与按键语义分离
+
+tiling 下:
+- **无修饰**在窗口边缘(或分割线)拖动 → 边界 fraction resize(原行为,鼠标跟手);
+- `<super>+左键` 拖动窗口任意处 → 拖拽重排(窗口跟手,预览落点);
+- `<super>+右键` 在窗口内按下拖动 → 半区判定 + fraction resize(把整条列/行边界移动,邻居联动;拖出格局外会被 MIN_SANE ~100px 钳制)。
+
+stacking 模式下切回原生 move/resize 插件行为(窗口自由移动,无重排预览)。
+
 ## P7:ext-workspace(ext_workspace_v1 协议 server 侧)(已全部通过,2026-09-05)
 
 背景:out-of-tree 插件 `ext-workspace` 向任务栏/dock 暴露工作区状态(ext-workspace-v1,version 1)。映射:工作区组↔wset(1:1)、工作区↔网格 cell(coordinates=[x,y],name=行主序 1-based "1".."N");state 只发 `active`;capabilities 只声明 `activate`;activate 请求走 `workspace_change_request_signal`(vswitch 同款接入点,无人处理才直接 set_workspace)。urgent/id/动态建组均 deferred(wayfire 0.10 core 无 urgent 概念;协议允许不声明能力)。自动化已全绿(scripts/ext-workspace-test.sh,A–E 五段):初始状态流(group→details→done 时序)、activate 请求端到端、多客户端独立广播、stop→finished、IPC get-state 与协议视图一致。客户端生态:waybar ≥0.14.0 的 workspaces 模块已移植到 ext-workspace-v1。
