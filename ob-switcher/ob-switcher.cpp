@@ -178,10 +178,10 @@ class SwitcherOSD
 
         void schedule_instructions(
             std::vector<wf::scene::render_instruction_t>& instructions,
-            const wf::render_target_t& target, wf::region_t& damage) override
+            const wf::render_target_t& target, wf::regionf_t& damage) override
         {
             auto full = node->owner->output->get_layout_geometry();
-            wf::region_t our_damage = damage & full;
+            wf::regionf_t our_damage = damage & full;
             if (!our_damage.empty())
             {
                 instructions.push_back(wf::scene::render_instruction_t{

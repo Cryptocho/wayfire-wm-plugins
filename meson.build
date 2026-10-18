@@ -33,7 +33,6 @@ libobtheme_dep = declare_dependency(
   dependencies: [dep_cairo],
 )
 
-subdir('proto-pan')
 # ob-theme before its consumers (provider owns ob_theme_init; loading
 # order in wayfire.ini decides at runtime, repo order is documentation).
 subdir('ob-theme')
@@ -84,8 +83,6 @@ executable('vinput', ['tools/vinput.c', vinput_proto_c, vinput_proto_h],
 # M3: ob-menu plugin.
 subdir('ob-menu')
 
-# P3: layout-manager (global layout mode switching).
-subdir('layout-manager')
 
 # P5: ob-switcher (fast-switcher + themerc-themed window-switcher OSD).
 subdir('ob-switcher')
@@ -100,8 +97,6 @@ install_data(
   'metadata/ob-decor.xml',
   'metadata/ob-menu.xml',
   'metadata/ob-switcher.xml',
-  'metadata/layout-manager.xml',
   'metadata/ext-workspace.xml',
-  'metadata/proto-pan.xml',
   install_dir: metadatadir,
 )

@@ -1,11 +1,11 @@
 #!/bin/bash
 # Headless smoke test: build product must load and initialize in wayfire.
-# Usage: scripts/smoke.sh [plugin-name]   (default: proto-pan)
+# Usage: scripts/smoke.sh [plugin-name] [config-name] (defaults: ob-theme, wayfire-ob-theme.ini)
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PLUG="${1:-proto-pan}"
-CONFIG="${2:-wayfire.ini}"
+PLUG="${1:-ob-theme}"
+CONFIG="${2:-wayfire-ob-theme.ini}"
 : "${XDG_RUNTIME_DIR:?"run from a user session (XDG_RUNTIME_DIR required)"}"
 [ -f "$ROOT/build/$PLUG/lib$PLUG.so" ] || { echo "SMOKE FAIL: $ROOT/build/$PLUG/lib$PLUG.so missing (run ninja first)"; exit 1; }
 

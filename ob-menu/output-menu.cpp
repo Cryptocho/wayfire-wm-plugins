@@ -62,10 +62,10 @@ class OutputMenu::MenuRenderInstance final : public wf::scene::render_instance_t
 
     void schedule_instructions(
         std::vector<wf::scene::render_instruction_t>& instructions,
-        const wf::render_target_t& target, wf::region_t& damage) override
+        const wf::render_target_t& target, wf::regionf_t& damage) override
     {
         auto full = node->owner->output->get_layout_geometry();
-        wf::region_t our_damage = damage & full;
+        wf::regionf_t our_damage = damage & full;
         if (!our_damage.empty())
         {
             instructions.push_back(wf::scene::render_instruction_t{
@@ -300,27 +300,22 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
         h += menu_row_height(*menu, i, theme.theme());
     }
 
-    /* Keep the menu visible: clamp the box into the workarea (openbox
-     * shifts the menu when the anchor is too close to an edge — e.g. a
-     * right-click in the free space around a full-screen window must not
-     * push the menu off-screen). */
-    {
-        auto wa = output->workarea->get_workarea();
-        int x = std::min((int)pos.x, wa.x + std::max(0, wa.width - w));
-        int y = std::min((int)pos.y, wa.y + std::max(0, wa.height - h));
-        pos.x = std::max(x, wa.x);
-        pos.y = std::max(y, wa.y);
-    }
+    /* Keep the menu visible in the output workarea. */
+    auto wa = wf::containing_box(output->workarea->get_workarea());
+    int x = std::min(pos.x, wa.x + std::max(0, wa.width - w));
+    int y = std::min(pos.y, wa.y + std::max(0, wa.height - h));
+    pos.x = std::max(x, wa.x);
+    pos.y = std::max(y, wa.y);
 
     level.menu = menu;
-    level.box  = {pos.x, pos.y, (uint32_t)w, (uint32_t)h};
+    level.box  = {pos.x, pos.y, (double)w, (double)h};
     level.item_rects.clear();
-    int y = pos.y + b;
+    y = pos.y + b;
     for (size_t i = 0; i < menu->items.size(); i++)
     {
         int rh = menu_row_height(*menu, i, theme.theme());
-        level.item_rects.push_back({pos.x + b, y,
-            (uint32_t)std::max(0, w - 2 * b), (uint32_t)rh});
+        level.item_rects.push_back({(double)(pos.x + b), (double)y,
+            (double)std::max(0, w - 2 * b), (double)rh});
         y += rh;
     }
 
@@ -965,7 +960,8 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
     }
     const auto &anchor_rect = parent.item_rects[
         parent.selected >= 0 ? parent.selected : 0];
-    const auto &outg = output->get_layout_geometry();
+    const auto &output_geometry = output->get_layout_geometry();
+    const auto output_box = wf::containing_box(output_geometry);
 
     /* position like labwc: parent align_left -> child opens to the left */
     int x = parent.align_left ?
@@ -976,8 +972,8 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
     /* unconstrain against the workarea (XDG positioner rules) */
     /* own unconstrain (equivalent to the XDG positioner
      * FLIP_X|SLIDE_X|SLIDE_Y adjustments vs the workarea) */
-    wlr_box box{x + outg.x, y + outg.y, w, h};
-    wlr_box usable = output->workarea->get_workarea();
+    wlr_box box{x + output_box.x, y + output_box.y, w, h};
+    wlr_box usable = wf::containing_box(output->workarea->get_workarea());
     if (box.x + (int)box.width > usable.x + usable.width)
     {
         box.x = usable.x + usable.width - box.width;
@@ -1001,8 +997,10 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
     OpenLevel child;
     child.menu = item->submenu;
     child.via_item = item;
-    layout_level(child, item->submenu, {box.x - outg.x, box.y - outg.y});
-    child.align_left = box.x < anchor_rect.x;
+    const int local_x = box.x - output_box.x;
+    const int local_y = box.y - output_box.y;
+    layout_level(child, item->submenu, {local_x, local_y});
+    child.align_left = local_x < anchor_rect.x;
     stack.push_back(std::move(child));
     sync_damage();
 }

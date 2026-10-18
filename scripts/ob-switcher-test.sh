@@ -18,7 +18,7 @@ export SOCK
 
 echo "=== starting headless wayfire (ob-theme + ob-switcher, 2 kitties) ==="
 _WAYFIRE_SOCKET="$SOCK" \
-WAYFIRE_PLUGIN_PATH="$ROOT/build/ob-theme:$ROOT/build/ob-switcher:$ROOT/build/ob-decor:$ROOT/build/ob-menu:$ROOT/build/layout-manager" \
+WAYFIRE_PLUGIN_PATH="$ROOT/build/ob-theme:$ROOT/build/ob-switcher:$ROOT/build/ob-decor:$ROOT/build/ob-menu" \
 WAYFIRE_PLUGIN_XML_PATH="$ROOT/metadata" \
 WLR_BACKENDS=headless \
 wayfire -c "$ROOT/test/wayfire-switcher.ini" -d >"$LOG" 2>&1 &

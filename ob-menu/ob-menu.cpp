@@ -275,8 +275,9 @@ class wayfire_ob_menu : public wf::plugin_interface_t
             return;
         }
 
-        auto gc     = wf::get_core().get_cursor_position();
-        auto wo     = wf::get_core().output_layout->get_output_at(gc.x, gc.y);
+        auto gc = wf::get_core().get_cursor_position();
+        auto wo = wf::get_core().output_layout->find_closest_output(
+            wf::pointf_t{(double)gc.x, (double)gc.y});
         auto *inst  = wo ? outputs.get(wo) : nullptr;
         if (!inst)
         {
@@ -299,7 +300,7 @@ class wayfire_ob_menu : public wf::plugin_interface_t
         auto g = wo->get_layout_geometry();
         wf::get_core().seat->focus_output(wo);
         inst->open_menu_at("root-menu",
-            wf::pointf_t{gc.x - (double)g.x, gc.y - (double)g.y});
+            wf::pointf_t{gc.x - g.x, gc.y - g.y});
         right_click_swallowed = true;
         ev->mode = wf::input_event_processing_mode_t::IGNORE;
     };

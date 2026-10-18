@@ -82,7 +82,11 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
     simple_decoration_node_t(wayfire_toplevel_view view) :
         node_t(false),
         theme{},
-        layout{theme, [=] (wlr_box box) { wf::scene::damage_node(shared_from_this(), box + get_offset()); }}
+        layout{theme, [=] (wlr_box box)
+        {
+            wf::scene::damage_node(shared_from_this(),
+                wf::from_integer_box(box) + wf::pointf_t{get_offset()});
+        }}
     {
         this->_view = view->weak_from_this();
         view->connect(&title_set);
@@ -100,7 +104,8 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
     {
         auto origin = get_offset();
         /* Clear background */
-        wlr_box geometry{origin.x, origin.y, size.width, size.height};
+        wf::geometry_t geometry = wf::construct_box(
+            wf::pointf_t{origin}, wf::dimensionsf_t{size.width, size.height});
 
         bool activated = false;
         if (auto view = _view.lock())
@@ -124,18 +129,20 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         {
             if (item->get_type() == wf::odecor::DECORATION_AREA_TITLE)
             {
-                wf::geometry_t title_geometry = item->get_geometry() + origin;
+                wf::geometry_t title_geometry =
+                    item->get_geometry() + wf::pointf_t{origin};
                 update_title(title_geometry.width, title_geometry.height,
                     data.target.scale, activated);
-                if (title_texture.tex.get_texture().texture != NULL)
+                auto texture = title_texture.tex.get_texture();
+                if (texture)
                 {
-                    data.pass->add_texture(title_texture.tex.get_texture(), data.target,
+                    data.pass->add_texture(texture, data.target,
                         title_geometry, data.damage);
                 }
             } else // button
             {
-                item->as_button().render(data, item->get_geometry() + origin,
-                    activated);
+                item->as_button().render(data,
+                    item->get_geometry() + wf::pointf_t{origin}, activated);
             }
         }
     }
@@ -187,10 +194,11 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         }
 
         void schedule_instructions(std::vector<wf::scene::render_instruction_t>& instructions,
-            const wf::render_target_t& target, wf::region_t& damage) override
+            const wf::render_target_t& target, wf::regionf_t& damage) override
         {
-            auto our_region = self->cached_region + self->get_offset();
-            wf::region_t our_damage = damage & our_region;
+            auto our_region = wf::regionf_t{self->cached_region} +
+                wf::pointf_t{self->get_offset()};
+            wf::regionf_t our_damage = damage & our_region;
             if (!our_damage.empty())
             {
                 instructions.push_back(wf::scene::render_instruction_t{
@@ -215,9 +223,9 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
 
     wf::geometry_t get_bounding_box() override
     {
-        return wf::construct_box(get_offset(), size);
+        return wf::construct_box(wf::pointf_t{get_offset()},
+            wf::dimensionsf_t{size.width, size.height});
     }
-
     /* wf::compositor_surface_t implementation */
     void handle_pointer_enter(wf::pointf_t point) override
     {

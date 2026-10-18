@@ -60,7 +60,7 @@ class decoration_theme_t
      * (state bits: OB_BTN_*). Size follows window.button.*.
      * Missing variants fall back like labwc; may be an empty texture.
      */
-    wf::texture_t get_button_texture(enum lab_node_type type,
+    std::shared_ptr<wf::texture_t> get_button_texture(enum lab_node_type type,
         unsigned bits, int active) const;
 
   private:

@@ -106,7 +106,7 @@ void decoration_theme_t::ensure_fill_texture(int active) const
      * rebuilds the cairo surface), but the pointer value can be reused
      * by the allocator after a free — the epoch check is authoritative. */
     if (!epoch_valid() || (fill_src[active] != surf) ||
-        !fill_tex[active].get_texture().texture)
+        !fill_tex[active].get_texture())
     {
         fill_tex[active] = wf::owned_texture_t{surf};
         fill_src[active] = surf;
@@ -138,13 +138,12 @@ void decoration_theme_t::render_background(
     const int tb_h = std::min(th, (int)frame.height);
     if ((tb_w > 0) && (tb_h > 0))
     {
-        ensure_fill_texture(active);
-        if (fill_tex[active].get_texture().texture)
+        auto texture = fill_tex[active].get_texture();
+        if (texture)
         {
-            wf::geometry_t tb{frame.x + b, frame.y, (uint32_t)tb_w,
-                (uint32_t)tb_h};
-            data.pass->add_texture(fill_tex[active].get_texture(), data.target,
-                tb, data.damage);
+            wf::geometry_t tb{frame.x + b, frame.y, (double)tb_w,
+                (double)tb_h};
+            data.pass->add_texture(texture, data.target, tb, data.damage);
         }
     }
 }
@@ -185,10 +184,9 @@ void decoration_theme_t::get_button_size(int *width, int *height,
     ob_theme_button_size(ob, width, height, spacing);
 }
 
-wf::texture_t decoration_theme_t::get_button_texture(
+std::shared_ptr<wf::texture_t> decoration_theme_t::get_button_texture(
     enum lab_node_type type, unsigned bits, int active) const
 {
-    static wf::texture_t empty;
     int bw, bh, bs;
     get_button_size(&bw, &bh, &bs);
     const int key = ((int)type << 8) | ((int)(bits & 3) << 1) | (active & 1);
@@ -199,7 +197,7 @@ wf::texture_t decoration_theme_t::get_button_texture(
             1.0);
         if (!surf)
         {
-            return empty;
+            return {};
         }
 
         it = button_tex_cache.emplace(key, wf::owned_texture_t{surf}).first;

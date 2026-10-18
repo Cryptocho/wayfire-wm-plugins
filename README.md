@@ -4,10 +4,9 @@ Openbox/labwc-flavored window management for [Wayfire](https://github.com/Wayfir
 implemented entirely as **out-of-tree plugins** (no wayfire core changes):
 
 - **openbox themerc theming** for window decorations, menus and the window
-  switcher OSD,
-- **openbox menu.xml** menus (submenus, pipemenu, dynamic client lists),
-- a **runtime-switchable global layout system** (floating ↔ tiling, per-view
-  float, smooth geometry animations).
+  switcher OSD;
+- **openbox menu.xml** menus (submenus, pipemenu, dynamic client lists);
+- a **theme provider**, window switcher and `ext_workspace_v1` server plugin.
 
 ## Plugins
 
@@ -18,13 +17,12 @@ implemented entirely as **out-of-tree plugins** (no wayfire core changes):
 | `ob-menu` | openbox menu.xml menus: submenu/pipemenu/dynamic client-list menus, keyboard + mouse navigation, opened via keybinding, titlebar right-click, menu button or `xdg show_window_menu`. |
 | `ob-theme` | Theme **provider**: owns the single `libobtheme` theme instance, publishes it to other plugins via core data + reload signal, offers in-place hot-reload (IPC `ob-theme/debug`). |
 | `ob-switcher` | Window switcher (fast-switcher behavior + labwc-cycle-style OSD): `<alt>+Tab` (labwc default), Esc cancels, click an OSD row to select; OSD colors/sizes come from themerc `osd.*` / `window_switcher.*` keys. |
-| `layout-manager` | Global layout modes: stacking (native floating) ↔ sway-style H/V tiling, runtime switch (`<super>+Shift+T` or IPC); per-view float (`<super>+Shift+Space`), split resizing, sway/adaptive tiling styles, optional geometry animations. |
-| `proto-pan` | Proof-of-concept for scrolling-style free panning (not wired into the roadmap phases; see AGENTS.md P0). |
+| `ext-workspace` | Implements the `ext_workspace_v1` Wayland protocol for workspace groups, workspace state and activation. |
 
 ## Building
 
-Requires wayfire 0.10.x dev files (pkg-config `wayfire`), cairo, pangocairo,
-libpng, glib-2.0, libxml-2.0, libdrm, wayland-server.
+Requires Wayfire 0.11.x development files (pkg-config `wayfire`), cairo,
+pangocairo, libpng, glib-2.0, libxml-2.0, libdrm and wayland-server.
 
 ```sh
 meson setup build
@@ -36,14 +34,14 @@ meson compile -C build
 Point wayfire at the build outputs and add the plugins to your ini:
 
 ```sh
-WAYFIRE_PLUGIN_PATH="$PWD/build/ob-theme:$PWD/build/ob-decor:$PWD/build/ob-menu:$PWD/build/ob-switcher:$PWD/build/layout-manager" \
+WAYFIRE_PLUGIN_PATH="$PWD/build/ob-theme:$PWD/build/ob-decor:$PWD/build/ob-menu:$PWD/build/ob-switcher:$PWD/build/ext-workspace" \
 WAYFIRE_PLUGIN_XML_PATH="$PWD/metadata" \
 wayfire -c your-test.ini
 ```
 
 ```ini
 [core]
-plugins = ob-theme ob-decor ob-menu ob-switcher layout-manager ...
+plugins = ob-theme ob-decor ob-menu ob-switcher ext-workspace ...
 preferred_decoration_mode = server
 
 [ob-theme]      ; optional: theme/fonts for all ob_* consumers
@@ -52,8 +50,7 @@ theme_name = OB-Arc-Dark
 
 `ob-theme` should be listed first (it initializes the theme before the other
 plugins), but everything works without it too — consumers fall back to lazy
-initialization. Default bindings: `<super>+Shift+T` layout mode,
-`<super>+Shift+Space` per-view float, `<super>F1` root menu, `<alt>+Space`
+initialization. Default bindings: `<super>F1` root menu, `<alt>+Space`
 client menu, `<alt>+Tab` window switcher — see each `metadata/*.xml`.
 
 ## Testing

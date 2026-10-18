@@ -56,7 +56,7 @@ void button_t::render(const scene::render_instruction_t& data,
     const unsigned bits =
         (is_hovered || is_pressed) ? OB_BTN_HOVERED : OB_BTN_DEFAULT;
     auto tex = theme.get_button_texture(lab_type, bits, active);
-    if (tex.texture)
+    if (tex)
     {
         data.pass->add_texture(tex, data.target, geometry, data.damage);
     }

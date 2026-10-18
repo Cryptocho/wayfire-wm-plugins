@@ -34,7 +34,7 @@ decoration_area_t::decoration_area_t(wf::geometry_t g,
     this->geometry = g;
 
     this->button = std::make_unique<button_t>(theme,
-        std::bind(damage_callback, g));
+        std::bind(damage_callback, wf::containing_box(g)));
 }
 
 wf::geometry_t decoration_area_t::get_geometry() const
