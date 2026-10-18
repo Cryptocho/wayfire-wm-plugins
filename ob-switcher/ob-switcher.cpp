@@ -245,7 +245,7 @@ class SwitcherOSD
         osd_box = wf::geometry_t{
             out_geo.x + (out_geo.width - width) / 2,
             out_geo.y + (out_geo.height - height) / 2,
-            (uint32_t)std::max(1, width), (uint32_t)std::max(1, height),
+            (double)std::max(1, width), (double)std::max(1, height),
         };
 
         const int sel_bw = active_border_width(t);
@@ -254,9 +254,8 @@ class SwitcherOSD
             row_boxes.push_back(wf::geometry_t{
                     osd_box.x + pad + sel_bw,
                     osd_box.y + pad + i * item_h,
-                    (uint32_t)std::max(1,
-                        width - 2 * (pad + sel_bw)),
-                    (uint32_t)item_h,
+                    (double)std::max(1, width - 2 * (pad + sel_bw)),
+                    (double)item_h,
                 });
         }
 
@@ -299,8 +298,8 @@ class SwitcherOSD
             border[3]}, data.target, osd_box, data.damage);
         wf::geometry_t inner{
             osd_box.x + bw, osd_box.y + bw,
-            (uint32_t)std::max(0, (int)osd_box.width - 2 * bw),
-            (uint32_t)std::max(0, (int)osd_box.height - 2 * bw),
+            (double)std::max(0, (int)osd_box.width - 2 * bw),
+            (double)std::max(0, (int)osd_box.height - 2 * bw),
         };
         data.pass->add_rect(bg_c, data.target, inner, data.damage);
 
@@ -322,8 +321,8 @@ class SwitcherOSD
                     data.target, box, data.damage);
                 wf::geometry_t row_inner{
                     box.x + sel_bw, box.y + sel_bw,
-                    (uint32_t)std::max(0, (int)box.width - 2 * sel_bw),
-                    (uint32_t)std::max(0, (int)box.height - 2 * sel_bw),
+                    (double)std::max(0, (int)box.width - 2 * sel_bw),
+                    (double)std::max(0, (int)box.height - 2 * sel_bw),
                 };
                 data.pass->add_rect(wf::color_t{sg[0], sg[1], sg[2], sg[3]},
                     data.target, row_inner, data.damage);
@@ -337,8 +336,8 @@ class SwitcherOSD
             if ((icon > 0) && !app_id.empty())
             {
                 int ib = box.y + ((int)box.height - icon) / 2;
-                wf::geometry_t icon_box{box.x + px, ib,
-                    (uint32_t)icon, (uint32_t)icon};
+                wf::geometry_t icon_box{box.x + px, (double)ib,
+                    (double)icon, (double)icon};
                 const float *ibg = t ?
                     ob_theme_switcher_item_active_bg(t) : FB_ACTIVE_BG;
                 data.pass->add_rect(
@@ -358,25 +357,25 @@ class SwitcherOSD
             const int id_w = 180;
             if ((tx + id_w) < (box.x + (int)box.width))
             {
-                auto surf_id = render_osd_text(app_id, id_w, box.height,
-                    text_c, font);
+                auto surf_id = render_osd_text(app_id, id_w,
+                    (int)box.height, text_c, font);
                 wf::owned_texture_t tex_id{surf_id};
                 cairo_surface_destroy(surf_id);
                 data.pass->add_texture(tex_id.get_texture(), data.target,
-                    wf::geometry_t{tx, box.y, (uint32_t)id_w,
-                        (uint32_t)box.height}, data.damage);
+                    wf::geometry_t{(double)tx, box.y, (double)id_w,
+                        box.height}, data.damage);
 
                 int title_x = tx + id_w + px;
                 int title_w = (box.x + (int)box.width - px) - title_x;
                 if (title_w > 0)
                 {
-                    auto surf_t = render_osd_text(title, title_w, box.height,
-                        text_c, font);
+                    auto surf_t = render_osd_text(title, title_w,
+                        (int)box.height, text_c, font);
                     wf::owned_texture_t tex_t{surf_t};
                     cairo_surface_destroy(surf_t);
                     data.pass->add_texture(tex_t.get_texture(), data.target,
-                        wf::geometry_t{title_x, box.y, (uint32_t)title_w,
-                            (uint32_t)box.height}, data.damage);
+                        wf::geometry_t{(double)title_x, box.y,
+                            (double)title_w, box.height}, data.damage);
                 }
             }
         }
@@ -458,7 +457,7 @@ class ob_switcher_output_t : public wf::per_output_plugin_instance_t,
     /* pointer_interaction_t: click an OSD row to select it (labwc). */
     void handle_pointer_button(const wlr_pointer_button_event& ev) override
     {
-        if (ev.state != WLR_BUTTON_RELEASED)
+        if (ev.state != WL_POINTER_BUTTON_STATE_RELEASED)
         {
             return;
         }

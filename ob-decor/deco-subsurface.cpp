@@ -105,7 +105,8 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         auto origin = get_offset();
         /* Clear background */
         wf::geometry_t geometry = wf::construct_box(
-            wf::pointf_t{origin}, wf::dimensionsf_t{size.width, size.height});
+            wf::pointf_t{origin}, wf::dimensionsf_t{
+                (double)size.width, (double)size.height});
 
         bool activated = false;
         if (auto view = _view.lock())
@@ -224,7 +225,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
     wf::geometry_t get_bounding_box() override
     {
         return wf::construct_box(wf::pointf_t{get_offset()},
-            wf::dimensionsf_t{size.width, size.height});
+            wf::dimensionsf_t{(double)size.width, (double)size.height});
     }
     /* wf::compositor_surface_t implementation */
     void handle_pointer_enter(wf::pointf_t point) override
@@ -446,9 +447,9 @@ wf::decoration_margins_t wf::ob_decorator_t::get_margins(const wf::toplevel_stat
     const int titlebar  = deco->theme.get_title_height() +
         deco->theme.get_border_size() + deco->theme.get_ring_width();
     return wf::decoration_margins_t{
-        .left   = thickness,
-        .right  = thickness,
-        .bottom = thickness,
-        .top    = titlebar,
+        .left   = (double)thickness,
+        .right  = (double)thickness,
+        .bottom = (double)thickness,
+        .top    = (double)titlebar,
     };
 }

@@ -159,13 +159,13 @@ void decoration_theme_t::render_ring(
     }
 
     const wf::color_t &rc = get_ring_color(active);
-    wf::geometry_t top{outer.x, outer.y, outer.width, (uint32_t)rw};
-    wf::geometry_t bottom{outer.x, outer.y + outer.height - rw,
-        outer.width, (uint32_t)rw};
-    wf::geometry_t left{outer.x, outer.y + rw, (uint32_t)rw,
-        (uint32_t)(outer.height - 2 * rw)};
-    wf::geometry_t right{outer.x + outer.width - rw, outer.y + rw,
-        (uint32_t)rw, (uint32_t)(outer.height - 2 * rw)};
+    const wf::geometry_t top{outer.x, outer.y, outer.width, (double)rw};
+    const wf::geometry_t bottom{outer.x, outer.y + outer.height - rw,
+        outer.width, (double)rw};
+    const double side_height = std::max(0.0, outer.height - 2.0 * rw);
+    const wf::geometry_t left{outer.x, outer.y + rw, (double)rw, side_height};
+    const wf::geometry_t right{outer.x + outer.width - rw, outer.y + rw,
+        (double)rw, side_height};
     data.pass->add_rect(rc, data.target, top, data.damage);
     data.pass->add_rect(rc, data.target, bottom, data.damage);
     data.pass->add_rect(rc, data.target, left, data.damage);

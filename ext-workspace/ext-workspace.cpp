@@ -502,7 +502,6 @@ class ext_workspace_plugin_t : public wf::plugin_interface_t
         wf::workspace_set_t *wset, wl_resource *group)
     {
         auto grid  = wset->get_workspace_grid_size();
-        auto wsc   = wset->get_current_workspace();
         auto &map  = cs.ws_handles;
         std::vector<std::pair<uint64_t, wf::point_t>> stale;
 

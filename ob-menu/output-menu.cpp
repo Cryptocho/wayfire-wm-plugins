@@ -308,7 +308,7 @@ void OutputMenu::layout_level(OpenLevel &level, Menu *menu, wf::point_t pos)
     pos.y = std::max(y, wa.y);
 
     level.menu = menu;
-    level.box  = {pos.x, pos.y, (double)w, (double)h};
+    level.box  = {(double)pos.x, (double)pos.y, (double)w, (double)h};
     level.item_rects.clear();
     y = pos.y + b;
     for (size_t i = 0; i < menu->items.size(); i++)
@@ -434,7 +434,6 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
 
     auto &state = MenuState::get();
     struct theme *ob = state.theme();
-    const int b = ob_theme_menu_border_width(ob);
     const int px = ob_theme_menu_items_padding_x(ob);
 
     for (size_t li = 0; li < stack.size(); li++)
@@ -462,9 +461,9 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
                     const int th = ob_theme_menu_separator_thickness(ob);
                     const int pw = ob_theme_menu_separator_padding_width(
                         ob);
-                    wf::geometry_t line{irect.x + pw,
-                        irect.y + py, (uint32_t)std::max(0,
-                        (int)irect.width - 2 * pw), (uint32_t)th};
+                    wf::geometry_t line{irect.x + pw, irect.y + py,
+                        (double)std::max(0, (int)irect.width - 2 * pw),
+                        (double)th};
                     data.pass->add_rect(
                         wf::color_t(sc[0], sc[1], sc[2], sc[3]),
                         data.target, line, data.damage);
@@ -523,8 +522,8 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
                 auto surf = render_submenu_arrow(aw, ah, fg, expanded);
                 wf::owned_texture_t tex{surf};
                 cairo_surface_destroy(surf);
-                wf::geometry_t arrow_rect{(uint32_t)ax, (uint32_t)ay,
-                    (uint32_t)aw, (uint32_t)ah};
+                wf::geometry_t arrow_rect{(double)ax, (double)ay,
+                    (double)aw, (double)ah};
                 data.pass->add_texture(tex.get_texture(), data.target,
                     arrow_rect, data.damage);
             }
@@ -918,7 +917,7 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
         const auto &anchor_rect = parent.item_rects[
             parent.selected >= 0 ? parent.selected : 0];
         if (!pipe.spawn_async(item->submenu, item,
-            {anchor_rect.x, anchor_rect.y}))
+            {static_cast<int>(anchor_rect.x), static_cast<int>(anchor_rect.y)}))
         {
             LOGE("ob-menu: pipemenu spawn failed for '", item->submenu->id,
                 "'");
@@ -964,15 +963,16 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
     const auto output_box = wf::containing_box(output_geometry);
 
     /* position like labwc: parent align_left -> child opens to the left */
-    int x = parent.align_left ?
+    int x = static_cast<int>(parent.align_left ?
         (anchor_rect.x - w + ox + b) :
-        (anchor_rect.x + anchor_rect.width - ox - b);
-    int y = anchor_rect.y - oy;
+        (anchor_rect.x + anchor_rect.width - ox - b));
+    int y = static_cast<int>(anchor_rect.y - oy);
 
     /* unconstrain against the workarea (XDG positioner rules) */
     /* own unconstrain (equivalent to the XDG positioner
      * FLIP_X|SLIDE_X|SLIDE_Y adjustments vs the workarea) */
-    wlr_box box{x + output_box.x, y + output_box.y, w, h};
+    wlr_box box{static_cast<int>(x + output_box.x),
+        static_cast<int>(y + output_box.y), w, h};
     wlr_box usable = wf::containing_box(output->workarea->get_workarea());
     if (box.x + (int)box.width > usable.x + usable.width)
     {
@@ -997,8 +997,8 @@ void OutputMenu::open_submenu(size_t level_idx, MenuItem *item)
     OpenLevel child;
     child.menu = item->submenu;
     child.via_item = item;
-    const int local_x = box.x - output_box.x;
-    const int local_y = box.y - output_box.y;
+    const int local_x = static_cast<int>(box.x - output_box.x);
+    const int local_y = static_cast<int>(box.y - output_box.y);
     layout_level(child, item->submenu, {local_x, local_y});
     child.align_left = local_x < anchor_rect.x;
     stack.push_back(std::move(child));

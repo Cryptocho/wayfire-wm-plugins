@@ -106,7 +106,7 @@ void decoration_layout_t::resize(int width, int height)
 
     auto add_button = [&] (enum lab_node_type type, int x)
     {
-        wf::geometry_t g{x, btn_y, (uint32_t)bw, (uint32_t)bh};
+        wf::geometry_t g{(double)x, (double)btn_y, (double)bw, (double)bh};
         this->layout_areas.push_back(std::make_unique<decoration_area_t>(
             g, damage_callback, theme));
         this->layout_areas.back()->as_button().set_lab_type(type);
@@ -138,10 +138,10 @@ void decoration_layout_t::resize(int width, int height)
 
     /* Titlebar dragging area between the button strips */
     wf::geometry_t title_geometry = {
-        content_left,
-        ring + border_size,
-        std::max(0, content_right - content_left),
-        titlebar_size,
+        (double)content_left,
+        (double)(ring + border_size),
+        (double)std::max(0, content_right - content_left),
+        (double)titlebar_size,
     };
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
         DECORATION_AREA_TITLE, title_geometry));
@@ -149,19 +149,21 @@ void decoration_layout_t::resize(int width, int height)
     /* Resizing edges (ring + theme border act as resize handles, like
      * labwc's invisible extents) */
     const int edge = ring + border_size;
-    wf::geometry_t border_geometry = {0, 0, edge, height};
+    wf::geometry_t border_geometry = {0.0, 0.0, (double)edge, (double)height};
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
         DECORATION_AREA_RESIZE_LEFT, border_geometry));
 
-    border_geometry = {width - edge, 0, edge, height};
+    border_geometry = {(double)(width - edge), 0.0, (double)edge,
+        (double)height};
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
         DECORATION_AREA_RESIZE_RIGHT, border_geometry));
 
-    border_geometry = {0, 0, width, edge};
+    border_geometry = {0.0, 0.0, (double)width, (double)edge};
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
         DECORATION_AREA_RESIZE_TOP, border_geometry));
 
-    border_geometry = {0, height - edge, width, edge};
+    border_geometry = {0.0, (double)(height - edge), (double)width,
+        (double)edge};
     this->layout_areas.push_back(std::make_unique<decoration_area_t>(
         DECORATION_AREA_RESIZE_BOTTOM, border_geometry));
 }

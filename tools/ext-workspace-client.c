@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdarg.h>
 
 #include <wayland-client.h>
 #include "ext-workspace-v1-client-protocol.h"
@@ -53,18 +52,6 @@ static struct {
     int finished;
 } g;
 
-static void fail(const char *fmt, ...) __attribute__((noreturn));
-
-static void fail(const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    printf("FAIL: ");
-    vprintf(fmt, ap);
-    printf("\n");
-    va_end(ap);
-    exit(1);
-}
 
 /* ------------------------------ listeners -------------------------------- */
 
@@ -377,7 +364,7 @@ int main(int argc, char **argv)
     uint32_t expect_ax = 0, expect_ay = 0;
     int has_expect_active = 0;
     uint32_t activate_x = 0, activate_y = 0, then_x = 0, then_y = 0;
-    int do_activate = 0, has_then = 0, do_stop = 0;
+    int do_activate = 0, do_stop = 0;
 
     for (int i = 1; i < argc; i++)
     {
@@ -405,7 +392,6 @@ int main(int argc, char **argv)
         {
             then_x = atoi(argv[++i]);
             then_y = atoi(argv[++i]);
-            has_then = 1;
         } else if (!strcmp(a, "--stop"))
         {
             do_stop = 1;
