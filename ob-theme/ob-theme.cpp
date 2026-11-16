@@ -6,7 +6,7 @@
  *     a consumer that ran first keeps its theme — provider logs it);
  *   - publishes ob_theme_data_t on core for ob-decor / ob-menu /
  *     ob-switcher and any future consumer;
- *   - offers an in-place reload path: IPC "ob-theme/debug" op=reload
+ *   - offers an in-place reload path: IPC "ob-theme/reload"
  *     calls ob_theme_reinit() (same struct reparsed) and emits
  *     ob_theme_reloaded_signal on core so consumers re-render.
  *
@@ -69,7 +69,10 @@ class wayfire_ob_theme : public wf::plugin_interface_t
 
     void fini() override
     {
+        ipc_repo->unregister_method("ob-theme/reload");
+#ifdef OB_WM_DEBUG
         ipc_repo->unregister_method("ob-theme/debug");
+#endif
         /* Intentionally NOT ob_theme_finish(): process-lifetime singleton,
          * consumers keep borrowed pointers. The data object stays on core
          * for the same reason. */
@@ -156,18 +159,19 @@ class wayfire_ob_theme : public wf::plugin_interface_t
 
     void register_ipc()
     {
-        ipc_repo->register_method("ob-theme/debug",
-            [this] (wf::json_t data) -> wf::json_t
+        ipc_repo->register_method("ob-theme/reload",
+            [this] (wf::json_t) -> wf::json_t
         {
-            std::string op = data.has_member("op") ?
-                (std::string)data["op"] : "get-state";
-            if (op == "reload")
-            {
-                reload();
-            }
-
+            reload();
             return state_json();
         });
+#ifdef OB_WM_DEBUG
+        ipc_repo->register_method("ob-theme/debug",
+            [] (wf::json_t) -> wf::json_t
+        {
+            return state_json();
+        });
+#endif
     }
 
     void reload()

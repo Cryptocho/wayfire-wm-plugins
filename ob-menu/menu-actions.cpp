@@ -7,6 +7,7 @@
 #include <wayfire/workspace-set.hpp>
 #include <wayfire/workarea.hpp>
 #include <wayfire/debug.hpp>
+#include <wayfire/plugins/wm-actions-signals.hpp>
 
 #include <cstdlib>
 #include <optional>
@@ -116,6 +117,28 @@ void run_menu_actions(wf::output_t *output, MenuItem *item,
                 wf::get_core().default_wm->fullscreen_request(client_view,
                     client_view->get_output(),
                     !client_view->pending_fullscreen());
+            }
+        }
+        else if (name == "ToggleAlwaysOnTop")
+        {
+            if (client_view && client_view->get_output())
+            {
+                bool above = !client_view->has_data("wm-actions-above");
+                wf::wm_actions_set_above_state_signal request;
+                request.view = client_view;
+                request.above = above;
+                client_view->get_output()->emit(&request);
+                if (client_view->has_data("wm-actions-above") != above)
+                {
+                    LOGE("ob-menu: ToggleAlwaysOnTop failed; check that wm-actions is enabled");
+                }
+            }
+        }
+        else if (name == "ToggleOmnipresent")
+        {
+            if (client_view)
+            {
+                client_view->set_sticky(!client_view->sticky);
             }
         }
         else if (name == "Close")

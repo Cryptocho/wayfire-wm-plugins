@@ -4,6 +4,10 @@ project('wayfire-wm-plugins', 'cpp', 'c',
   default_options: ['cpp_std=c++17'],
   meson_version: '>=0.61.0')
 
+if get_option('debug')
+  add_project_arguments('-DOB_WM_DEBUG', language: ['c', 'cpp'])
+endif
+
 # Wayfire is loaded via its installed headers + pkg-config.
 # There is no libwayfire.so: plugin symbols resolve from the wayfire binary
 # itself (linked with -rdynamic), so plugins must NOT link any wayfire lib.

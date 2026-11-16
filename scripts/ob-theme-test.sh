@@ -2,7 +2,7 @@
 # ob-theme provider smoke test (headless):
 #   1. ob-theme loads FIRST (order_hint), initializes the OB-Arc-Dark theme
 #   2. ob-theme/debug get-state reports has_theme=true, theme_name, epoch=1
-#   3. op=reload bumps epoch and keeps the theme name
+#   3. ob-theme/reload bumps epoch and keeps the theme name
 #   4. no second-init warning in the log
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

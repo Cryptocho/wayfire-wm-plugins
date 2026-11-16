@@ -10,6 +10,23 @@ namespace wf
 {
 namespace odecor
 {
+static std::string shared_font()
+{
+    try
+    {
+        wf::option_wrapper_t<std::string> font{"ob-theme/font"};
+        if (!font.value().empty())
+        {
+            return font.value();
+        }
+    } catch (const std::exception&)
+    {
+        /* ob-theme metadata may be absent in provider-less setups. */
+    }
+
+    return "sans 10";
+}
+
 decoration_theme_t::decoration_theme_t()
 {
     /* Theme source order: ob-theme provider (owns the singleton) →
@@ -33,7 +50,7 @@ decoration_theme_t::decoration_theme_t()
     {
         struct ob_theme_config cfg = {};
         std::string name  = theme_name;
-        std::string fnt   = font;
+        std::string fnt   = shared_font();
         std::string lay   = "menu:iconify,max,close";
         cfg.theme_name      = name.c_str();
         cfg.font            = fnt.c_str();
@@ -209,19 +226,18 @@ std::shared_ptr<wf::texture_t> decoration_theme_t::get_button_texture(
 
 std::string decoration_theme_t::title_font(bool active) const
 {
-    /* labwc rc.xml <font place="ActiveWindow"> semantics: separate
-     * per-focus fonts; empty option falls back to ob-decor/font */
+    /* labwc rc.xml <font place="ActiveWindow"> semantics. */
     auto &opt = active ? font_active : font_inactive;
     if (!((std::string)opt).empty())
     {
         return opt;
     }
 
-    return font;
+    return shared_font();
 }
 
 cairo_surface_t *decoration_theme_t::render_text(std::string text,
-    int width, int height, bool active) const
+    int width, int height, int center_x, bool active) const
 {
     const auto format = CAIRO_FORMAT_ARGB32;
     auto surface = cairo_image_surface_create(format, width, height);
@@ -240,23 +256,30 @@ cairo_surface_t *decoration_theme_t::render_text(std::string text,
     PangoLayout *layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, font_desc);
     pango_layout_set_text(layout, text.c_str(), text.size());
-    /* Justify within the whole title area, per the theme. */
-    pango_layout_set_width(layout, width * PANGO_SCALE);
+    /* Keep text between the buttons, centered on the window when possible. */
+    PangoRectangle logical;
+    pango_layout_get_pixel_extents(layout, nullptr, &logical);
+    int layout_width = std::min(width, logical.width);
+    pango_layout_set_width(layout, layout_width * PANGO_SCALE);
     pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
+    pango_layout_get_pixel_extents(layout, nullptr, &logical);
+
+    int x = 0;
     switch (ob_theme_justify(ob))
     {
       case LAB_JUSTIFY_CENTER:
-        pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+        x = std::clamp(center_x - layout_width / 2, 0, width - layout_width);
         break;
 
       case LAB_JUSTIFY_RIGHT:
-        pango_layout_set_alignment(layout, PANGO_ALIGN_RIGHT);
+        x = width - layout_width;
         break;
 
       default:
-        pango_layout_set_alignment(layout, PANGO_ALIGN_LEFT);
         break;
     }
+
+    cairo_move_to(cr, x, (height - logical.height) / 2.0 - logical.y);
 
     cairo_set_source_rgba(cr, color.r, color.g, color.b, color.a);
     pango_cairo_show_layout(cr, layout);

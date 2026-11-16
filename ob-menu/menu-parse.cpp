@@ -302,6 +302,8 @@ void add_default_menus(MenuSet &set)
         add("Maximize", {"ToggleMaximize", {}});
         add("Fullscreen", {"ToggleFullscreen", {}});
         add("Close", {"Close", {}});
+        add("Toggle Always on Top", {"ToggleAlwaysOnTop", {}});
+        add("Toggle Visible on All Workspaces", {"ToggleOmnipresent", {}});
     }
 
     if (!set.find("client-list-combined-menu"))

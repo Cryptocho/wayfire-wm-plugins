@@ -15,7 +15,7 @@ implemented entirely as **out-of-tree plugins** (no wayfire core changes):
 | `libobtheme` | Vendored labwc theme engine (labwc @ `5aaa5da0571b`, ~minimal diff) exposing an `obtheme.h` C API: themerc parsing, button image rendering, font handling. Built as a **shared library** so exactly one theme instance exists per process. |
 | `ob-decor` | Server-side decorations themed by openbox themerc: titlebar (fill/gradient/justify), border strips, outer ring (active+inactive colors), xbm buttons with hover. |
 | `ob-menu` | openbox menu.xml menus: submenu/pipemenu/dynamic client-list menus, keyboard + mouse navigation, opened via keybinding, titlebar right-click, menu button or `xdg show_window_menu`. |
-| `ob-theme` | Theme **provider**: owns the single `libobtheme` theme instance, publishes it to other plugins via core data + reload signal, offers in-place hot-reload (IPC `ob-theme/debug`). |
+| `ob-theme` | Theme **provider**: owns the single `libobtheme` theme instance, publishes it to other plugins via core data + reload signal, offers in-place hot-reload (IPC `ob-theme/reload`). |
 | `ob-switcher` | Window switcher (fast-switcher behavior + labwc-cycle-style OSD): `<alt>+Tab` (labwc default), Esc cancels, click an OSD row to select; OSD colors/sizes come from themerc `osd.*` / `window_switcher.*` keys. |
 | `ext-workspace` | Implements the `ext_workspace_v1` Wayland protocol for workspace groups, workspace state and activation. |
 
@@ -46,6 +46,7 @@ preferred_decoration_mode = server
 
 [ob-theme]      ; optional: theme/fonts for all ob_* consumers
 theme_name = OB-Arc-Dark
+font = JetBrainsMono Nerd Font 9
 ```
 
 `ob-theme` should be listed first (it initializes the theme before the other
@@ -53,7 +54,27 @@ plugins), but everything works without it too — consumers fall back to lazy
 initialization. Default bindings: `<super>F1` root menu, `<alt>+Space`
 client menu, `<alt>+Tab` window switcher — see each `metadata/*.xml`.
 
+`ob-theme/font` supplies the window title and switcher OSD font. Optional
+`ob-decor/font_active`, `ob-decor/font_inactive` and `ob-theme/font_osd`
+override it for those surfaces. Restart Wayfire after changing fonts.
+
+`ob-decor` centers center-justified titles on the window when space permits,
+and vertically within the titlebar. Long titles remain between the buttons and
+are ellipsized to fit; left and right theme justification remain supported.
+
+The built-in client menu includes toggles for always-on-top and visibility on
+all workspaces. Always-on-top requires Wayfire's `wm-actions` plugin. Custom
+`client-menu` definitions can use the `ToggleAlwaysOnTop` and
+`ToggleOmnipresent` actions.
+
 ## Testing
+
+Debug-only IPC methods (`ob-theme/debug`, `ob-menu/debug`,
+`ob-switcher/debug`, and `ext-workspace/get-state`) and diagnostic helpers are
+compiled when Meson's `debug`
+option is enabled. The default `debug` and `debugoptimized` build types enable
+it; `release` disables it. Override explicitly with `-Ddebug=true` or
+`-Ddebug=false`. Automated IPC tests require a debug-enabled build.
 
 Automated (headless) suites live in `scripts/`, e.g.
 

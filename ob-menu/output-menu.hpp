@@ -12,7 +12,9 @@
 #include <wayfire/scene-render.hpp>
 #include <wayfire/util.hpp>
 #include <wayfire/nonstd/wlroots.hpp>
+#ifdef OB_WM_DEBUG
 #include <wayfire/nonstd/json.hpp>
+#endif
 
 #include <wayfire/debug.hpp>
 #include <wayfire/toplevel-view.hpp>
@@ -54,8 +56,10 @@ class OutputMenu : public wf::pointer_interaction_t,
         return tree_active;
     }
 
+#ifdef OB_WM_DEBUG
     /** Selection state for IPC assertions. */
     wf::json_t get_state();
+#endif
 
     /* --- input entry points (grab routes all events here) --- */
     void handle_pointer_enter(wf::pointf_t global) override

@@ -26,6 +26,9 @@ diffs below.
 
 ## Local diffs in vendored files
 
+### src/common/dir.c
+1. Theme path diagnostics are compiled only when `OB_WM_DEBUG` is defined.
+
 ### src/theme.c
 1. Includes: removed `labwc.h`, `ssd.h`, `<wlr/render/pixman.h>` (supplied by
    `shims/config/rcxml.h` or dropped).

@@ -11,7 +11,7 @@
 		</option>
 		<option name="font" type="string">
 			<_short>Base font</_short>
-			<_long>Pango font description used when the per-place fonts below are empty. Empty inherits the libobtheme default (sans 10).</_long>
+			<_long>Pango font description for window titles and switcher OSD. Empty uses sans 10; per-place font options override it.</_long>
 			<default></default>
 		</option>
 		<option name="font_menuitem" type="string">

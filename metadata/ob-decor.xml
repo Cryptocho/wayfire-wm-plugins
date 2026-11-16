@@ -9,19 +9,14 @@
 			<_long>Openbox theme name (searched in ~/.themes etc., openbox-3/themerc). Empty = labwc built-in defaults.</_long>
 			<default>OB-Arc-Dark</default>
 		</option>
-		<option name="font" type="string">
-			<_short>Title font</_short>
-			<_long>Pango font description for the titlebar text (themerc carries no window fonts, same as labwc).</_long>
-			<default>sans 10</default>
-		</option>
 		<option name="font_active" type="string">
 			<_short>Title font (focused)</_short>
-			<_long>Pango font for the titlebar text of the focused window (labwc rc.xml place="ActiveWindow"). Empty value inherits ob-decor/font.</_long>
+			<_long>Pango font for the titlebar text of the focused window (labwc rc.xml place="ActiveWindow"). Empty value inherits ob-theme/font.</_long>
 			<default></default>
 		</option>
 		<option name="font_inactive" type="string">
 			<_short>Title font (unfocused)</_short>
-			<_long>Pango font for the titlebar text of unfocused windows (place="InactiveWindow"). Empty value inherits ob-decor/font.</_long>
+			<_long>Pango font for the titlebar text of unfocused windows (place="InactiveWindow"). Empty value inherits ob-theme/font.</_long>
 			<default></default>
 		</option>
 		<option name="titlebar_layout" type="string">

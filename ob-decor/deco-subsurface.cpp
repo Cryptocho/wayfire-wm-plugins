@@ -41,7 +41,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         }
     };
 
-    void update_title(int width, int height, double scale, bool active)
+    void update_title(int width, int height, int center_x, double scale, bool active)
     {
         if (auto view = _view.lock())
         {
@@ -50,14 +50,19 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
                 static_cast<int32_t>(height * scale)
             };
 
+            int target_center = static_cast<int>(center_x * scale);
             if ((title_texture.tex.get_size() != target_size) ||
                 (title_texture.current_text != view->get_title()) ||
-                (title_texture.current_active != active))
+                (title_texture.current_active != active) ||
+                (title_texture.center_x != target_center))
             {
-                auto surface = theme.render_text(view->get_title(), target_size.width, target_size.height, active);
+                auto surface = theme.render_text(view->get_title(), target_size.width,
+                    target_size.height, target_center, active);
                 title_texture.tex = wf::owned_texture_t{surface};
                 cairo_surface_destroy(surface);
                 title_texture.current_text = view->get_title();
+                title_texture.current_active = active;
+                title_texture.center_x = target_center;
             }
         }
     }
@@ -67,6 +72,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
         wf::owned_texture_t tex;
         std::string current_text = "";
         bool current_active = false;
+        int center_x = 0;
     } title_texture;
 
   public:
@@ -133,7 +139,7 @@ class simple_decoration_node_t : public wf::scene::node_t, public wf::pointer_in
                 wf::geometry_t title_geometry =
                     item->get_geometry() + wf::pointf_t{origin};
                 update_title(title_geometry.width, title_geometry.height,
-                    data.target.scale, activated);
+                    size.width / 2 - item->get_geometry().x, data.target.scale, activated);
                 auto texture = title_texture.tex.get_texture();
                 if (texture)
                 {
@@ -408,6 +414,7 @@ wf::ob_decorator_t::~ob_decorator_t()
     wf::scene::remove_child(deco);
 }
 
+#ifdef OB_WM_DEBUG
 int wf::ob_decorator_t::simulate_drag(int x0, int y0, int x1, int y1)
 {
     auto& layout = deco->layout;
@@ -434,6 +441,7 @@ int wf::ob_decorator_t::simulate_drag(int x0, int y0, int x1, int y1)
     layout.handle_focus_lost();
     return release.action;
 }
+#endif
 
 wf::decoration_margins_t wf::ob_decorator_t::get_margins(const wf::toplevel_state_t& state)
 {

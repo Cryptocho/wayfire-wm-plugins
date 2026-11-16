@@ -99,7 +99,9 @@ build_theme_path_openbox(struct ctx *ctx, char *prefix, const char *path)
 static void
 find_dir(struct ctx *ctx)
 {
+#ifdef OB_WM_DEBUG
 	char *debug = getenv("LABWC_DEBUG_DIR_CONFIG_AND_THEME");
+#endif
 
 	struct buf prefix = BUF_INIT;
 	for (int i = 0; ctx->dirs[i].path; i++) {
@@ -129,9 +131,11 @@ find_dir(struct ctx *ctx)
 		prefixes = g_strsplit(prefix.data, ":", -1);
 		for (gchar **p = prefixes; *p; p++) {
 			ctx->build_path_fn(ctx, *p, d.path);
+#ifdef OB_WM_DEBUG
 			if (debug) {
 				fprintf(stderr, "%s\n", ctx->buf);
 			}
+#endif
 
 			/*
 			 * TODO: We could stat() and continue here if we really

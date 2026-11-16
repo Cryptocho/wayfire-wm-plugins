@@ -544,10 +544,12 @@ void OutputMenu::render(const wf::scene::render_instruction_t& data)
 
 void OutputMenu::handle_pointer_motion_impl(wf::pointf_t global)
 {
+#ifdef OB_WM_DEBUG
     if (getenv("OB_MENU_INPUT_DEBUG"))
     {
         LOGI("ob-menu: pointer motion global=", global.x, ",", global.y);
     }
+#endif
 
     if (stack.empty())
     {
@@ -602,10 +604,12 @@ void OutputMenu::run_actions(MenuItem *item)
 void OutputMenu::handle_pointer_button(const wlr_pointer_button_event& ev,
     bool *dismissed)
 {
+#ifdef OB_WM_DEBUG
     if (getenv("OB_MENU_INPUT_DEBUG"))
     {
         LOGI("ob-menu: pointer button ", ev.button, " state ", ev.state);
     }
+#endif
 
     if (stack.empty() || (ev.button != BTN_LEFT))
     {
@@ -678,6 +682,7 @@ void OutputMenu::handle_pointer_button(const wlr_pointer_button_event& ev,
     }
 }
 
+#ifdef OB_WM_DEBUG
 wf::json_t OutputMenu::get_state()
 {
     wf::json_t r;
@@ -711,13 +716,16 @@ wf::json_t OutputMenu::get_state()
 
     return r;
 }
+#endif
 
 void OutputMenu::handle_keyboard_key(wf::seat_t*, wlr_keyboard_key_event event)
 {
+#ifdef OB_WM_DEBUG
     if (getenv("OB_MENU_INPUT_DEBUG"))
     {
         LOGI("ob-menu: keyboard key ", event.keycode, " state ", event.state);
     }
+#endif
 
     if (event.state != WL_KEYBOARD_KEY_STATE_PRESSED)
     {

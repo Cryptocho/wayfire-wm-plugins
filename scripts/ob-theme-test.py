@@ -44,7 +44,7 @@ check("theme name parsed", st.get("theme_name") == "OB-Arc-Dark",
       f"got {st.get('theme_name')!r}")
 check("epoch starts at 1", st.get("epoch") == 1, str(st.get("epoch")))
 
-st2 = call("ob-theme/debug", {"op": "reload"})
+st2 = call("ob-theme/reload")
 check("reload bumps epoch", st2.get("epoch") == 2, str(st2.get("epoch")))
 check("theme survives reload", st2.get("has_theme") is True and
       st2.get("theme_name") == "OB-Arc-Dark", str(st2))

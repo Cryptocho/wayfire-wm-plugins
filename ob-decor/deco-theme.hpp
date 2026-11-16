@@ -48,7 +48,7 @@ class decoration_theme_t
      * The caller is responsible for freeing the memory afterwards.
      */
     cairo_surface_t *render_text(std::string text, int width, int height,
-        bool active) const;
+        int center_x, bool active) const;
 
     /** Parsed titlebar buttons for side (0 = left, 1 = right); @returns count */
     int get_title_buttons(int side, enum lab_node_type *out, int max) const;
@@ -74,10 +74,9 @@ class decoration_theme_t
     static constexpr const char *DATA_NAME = "ob-theme";
 
     wf::option_wrapper_t<std::string> theme_name{"ob-decor/theme"};
-    wf::option_wrapper_t<std::string> font{"ob-decor/font"};
     wf::option_wrapper_t<std::string> font_active{"ob-decor/font_active"};
     wf::option_wrapper_t<std::string> font_inactive{"ob-decor/font_inactive"};
-    /* per-focus title font: explicit option, falling back to @font */
+    /* Per-focus title fonts override the shared ob-theme font. */
     std::string title_font(bool active) const;
     wf::option_wrapper_t<int> ring_w{"ob-decor/ring_width"};
     wf::option_wrapper_t<wf::color_t> ring_active_color{"ob-decor/ring_active_color"};

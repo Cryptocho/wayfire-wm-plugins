@@ -8,8 +8,10 @@
 #include <wayfire/per-output-plugin.hpp>
 #include <wayfire/signal-definitions.hpp>
 #include <wayfire/output.hpp>
+#ifdef OB_WM_DEBUG
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
+#endif
 #include <wayfire/option-wrapper.hpp>
 #include <wayfire/bindings-repository.hpp>
 #include <wayfire/workarea.hpp>
@@ -230,13 +232,17 @@ class wayfire_ob_menu : public wf::plugin_interface_t
             tn, "'");
 
         outputs.init_output_tracking();
+#ifdef OB_WM_DEBUG
         register_ipc();
+#endif
         wf::get_core().connect(&on_desktop_right_click);
     }
 
     void fini() override
     {
+#ifdef OB_WM_DEBUG
         ipc_repo->unregister_method("ob-menu/debug");
+#endif
         outputs.fini_output_tracking();
     }
 
@@ -305,7 +311,9 @@ class wayfire_ob_menu : public wf::plugin_interface_t
         ev->mode = wf::input_event_processing_mode_t::IGNORE;
     };
 
+#ifdef OB_WM_DEBUG
     wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
+#endif
 
     struct outputs_t : public wf::per_output_tracker_mixin_t<ob_menu_output_t>
     {
@@ -318,6 +326,7 @@ class wayfire_ob_menu : public wf::plugin_interface_t
 
     outputs_t outputs;
 
+#ifdef OB_WM_DEBUG
     void register_ipc()
     {
         ipc_repo->register_method("ob-menu/debug", [this] (wf::json_t data)
@@ -373,6 +382,7 @@ class wayfire_ob_menu : public wf::plugin_interface_t
             return r;
         });
     }
+#endif
 };
 } // namespace obmenu
 

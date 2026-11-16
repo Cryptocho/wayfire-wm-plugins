@@ -30,8 +30,10 @@
 #include <wayfire/workspace-set.hpp>
 #include <wayfire/signal-definitions.hpp>
 #include <wayfire/nonstd/wlroots-full.hpp>
+#ifdef OB_WM_DEBUG
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
+#endif
 #include <wayfire/util/log.hpp>
 #include <wayfire/util.hpp>
 
@@ -345,7 +347,9 @@ class ext_workspace_plugin_t : public wf::plugin_interface_t
     int pending_rounds = 0;
     wf::wl_timer<false> retry_timer;
 
+#ifdef OB_WM_DEBUG
     wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
+#endif
 
     /* ---------------------- global binding & full state ------------------- */
 
@@ -719,6 +723,7 @@ class ext_workspace_plugin_t : public wf::plugin_interface_t
         reconcile_all();
     };
 
+#ifdef OB_WM_DEBUG
     /* -------------------------------- IPC --------------------------------- */
 
     wf::json_t get_state_json()
@@ -757,6 +762,7 @@ class ext_workspace_plugin_t : public wf::plugin_interface_t
         r["clients"] = (int)clients.size();
         return r;
     }
+#endif
 };
 
 void ext_workspace_plugin_t::init()
@@ -778,17 +784,21 @@ void ext_workspace_plugin_t::init()
     wf::get_core().output_layout->connect(&on_output_removed);
     wf::get_core().connect(&on_reload_config);
 
+#ifdef OB_WM_DEBUG
     ipc_repo->register_method("ext-workspace/get-state", [this] (wf::json_t)
     {
         return get_state_json();
     });
+#endif
 
     LOGI("ext-workspace: ext_workspace_manager_v1 global registered");
 }
 
 void ext_workspace_plugin_t::fini()
 {
+#ifdef OB_WM_DEBUG
     ipc_repo->unregister_method("ext-workspace/get-state");
+#endif
     retry_timer.disconnect();
 
     /* Destroy every client state while the plugin object is still alive:

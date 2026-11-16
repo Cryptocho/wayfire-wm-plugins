@@ -31,8 +31,10 @@
 #include <wayfire/toplevel-view.hpp>
 #include <wayfire/window-manager.hpp>
 #include <wayfire/option-wrapper.hpp>
+#ifdef OB_WM_DEBUG
 #include <wayfire/plugins/ipc/ipc-method-repository.hpp>
 #include <wayfire/plugins/common/shared-core-data.hpp>
+#endif
 #include <wayfire/output.hpp>
 #include <wayfire/opengl.hpp>
 #include <wayfire/plugins/common/cairo-util.hpp>
@@ -473,6 +475,7 @@ class ob_switcher_output_t : public wf::per_output_plugin_instance_t,
     void handle_pointer_motion(wf::pointf_t, uint32_t) override
     {}
 
+#ifdef OB_WM_DEBUG
     /* ---- IPC hooks (headless assertions) ---- */
     bool ipc_activate(bool forward)
     {
@@ -493,6 +496,7 @@ class ob_switcher_output_t : public wf::per_output_plugin_instance_t,
         r["osd_visible"] = osd != nullptr;
         return r;
     }
+#endif
 
   private:
     wf::option_wrapper_t<wf::activatorbinding_t> activate_key{
@@ -734,30 +738,39 @@ class wayfire_ob_switcher : public wf::plugin_interface_t
     void init() override
     {
         outputs.init_output_tracking();
+#ifdef OB_WM_DEBUG
         register_ipc();
+#endif
     }
 
     void fini() override
     {
+#ifdef OB_WM_DEBUG
         ipc_repo->unregister_method("ob-switcher/debug");
+#endif
         outputs.fini_output_tracking();
     }
 
   private:
+#ifdef OB_WM_DEBUG
     wf::shared_data::ref_ptr_t<wf::ipc::method_repository_t> ipc_repo;
+#endif
 
     struct outputs_t : public wf::per_output_tracker_mixin_t<
             ob_switcher_output_t>
     {
+#ifdef OB_WM_DEBUG
         ob_switcher_output_t *get(wf::output_t *output)
         {
             auto it = output_instance.find(output);
             return it == output_instance.end() ? nullptr : it->second.get();
         }
+#endif
     };
 
     outputs_t outputs;
 
+#ifdef OB_WM_DEBUG
     void register_ipc()
     {
         ipc_repo->register_method("ob-switcher/debug",
@@ -789,6 +802,7 @@ class wayfire_ob_switcher : public wf::plugin_interface_t
             return r;
         });
     }
+#endif
 };
 } // namespace obswitcher
 
